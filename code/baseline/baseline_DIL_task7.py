@@ -21,7 +21,8 @@ import torch.optim as optim
 from domain_net import MCnn14
 from domain_net_dtn import MCnn14DTN, MCnn14Mixed
 from domain_net_arch import (MCnn14CLF, MCnn14Cos, MCnn14FiLM,
-                             MCnn14SE, MCnn14Att)
+                             MCnn14SE, MCnn14Att,
+                             MCnn14SEDeep, MCnn14SEClf, MCnn14Res)
 
 from datasetfactory_task7 import DILDatasetInc as DILDataset
 from sklearn import metrics
@@ -127,13 +128,16 @@ class Learner():
         super(Learner, self).__init__()
 
         _model_zoo = {
-            'dtn':    MCnn14DTN,
-            'mixed':  MCnn14Mixed,
-            'bn_clf': MCnn14CLF,
-            'bn_cos': MCnn14Cos,
-            'bn_film': MCnn14FiLM,
-            'bn_se':  MCnn14SE,
-            'bn_att': MCnn14Att,
+            'dtn':        MCnn14DTN,
+            'mixed':      MCnn14Mixed,
+            'bn_clf':     MCnn14CLF,
+            'bn_cos':     MCnn14Cos,
+            'bn_film':    MCnn14FiLM,
+            'bn_se':      MCnn14SE,
+            'bn_att':     MCnn14Att,
+            'bn_se_deep': MCnn14SEDeep,
+            'bn_se_clf':  MCnn14SEClf,
+            'bn_res':     MCnn14Res,
         }
         Model = _model_zoo.get(model_type, MCnn14)   # default / 'bn' -> baseline
         self.model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
@@ -374,11 +378,15 @@ if __name__ == '__main__':
     parser_train.add_argument('--save', action='store_true', default=False)
     parser_train.add_argument('--model_type', type=str,
                               choices=['bn', 'dtn', 'mixed',
-                                       'bn_clf', 'bn_cos', 'bn_film', 'bn_se', 'bn_att'],
+                                       'bn_clf', 'bn_cos', 'bn_film', 'bn_se', 'bn_att',
+                                       'bn_se_deep', 'bn_se_clf', 'bn_res'],
                               default='dtn',
                               help='bn=BatchNorm baseline; dtn=DTN for D2+D3; mixed=BN D2/DTN D3; '
                                    'bn_clf=per-domain linear head; bn_cos=per-domain cosine head; '
-                                   'bn_film=FiLM adapters; bn_se=SE adapters; bn_att=attention pooling')
+                                   'bn_film=FiLM adapters; bn_se=SE adapters; bn_att=attention pooling; '
+                                   'bn_se_deep=deeper 2-layer SE adapters; '
+                                   'bn_se_clf=SE adapters + per-domain head; '
+                                   'bn_res=residual bottleneck conv adapters')
     parser_train.add_argument('--checkpoint_dir', type=str, default=None,
                               help='Override config.save_resume_path for this run')
     # Parse arguments

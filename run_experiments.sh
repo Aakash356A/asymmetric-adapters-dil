@@ -110,6 +110,11 @@ run_experiment() {
 run_experiment bn_se_freeze    1e-4    32    120      se_freeze_backbone           # #3b per-domain SE adapters
 # run_experiment bn_att   1e-4    32    120      attention_pooling     # #4  per-domain attention pooling
 
+# --- new experiments to close D2→D3 gap ---------------------------------
+run_experiment bn_se_deep  1e-3    32    120      deeper_se_adapters    # A: 2-layer SE bottleneck
+run_experiment bn_se_clf   1e-3    32    120      se_plus_domain_head   # B: SE adapters + per-domain head
+run_experiment bn_res      1e-3    32    120      residual_bottleneck   # C: zero-init residual conv adapters
+
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
 # run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4

@@ -249,6 +249,120 @@ class MCnn14SE(_AdapterNet):
 
 
 # ---------------------------------------------------------------------------
+# New Idea A -- DEEPER SE adapters  (bn_se_deep)
+# ---------------------------------------------------------------------------
+
+class SEBlockDeep(nn.Module):
+    """Two-layer SE bottleneck: more expressive channel recalibration per domain."""
+
+    def __init__(self, channels, reduction=8):
+        super().__init__()
+        hidden = max(channels // reduction, 4)
+        self.fc1 = nn.Linear(channels, hidden)
+        self.fc2 = nn.Linear(hidden, hidden)
+        self.fc3 = nn.Linear(hidden, channels)
+
+    def forward(self, x):
+        s = x.mean(dim=(2, 3))           # global avg pool → (B, C)
+        s = F.relu(self.fc1(s))
+        s = F.relu(self.fc2(s))
+        s = torch.sigmoid(self.fc3(s))   # gate in [0, 1]
+        return x * s.unsqueeze(-1).unsqueeze(-1)
+
+
+class MCnn14SEDeep(_AdapterNet):
+    """SE adapters with a deeper (2-layer) bottleneck for more domain capacity."""
+    def _make_adapter(self, channels):
+        return SEBlockDeep(channels)
+
+
+# ---------------------------------------------------------------------------
+# New Idea B -- SE adapters + per-domain classifier head  (bn_se_clf)
+# ---------------------------------------------------------------------------
+
+class MCnn14SEClf(_AdapterNet):
+    """
+    SE feature adapters PLUS a per-domain linear classifier head.
+    Each domain gets:
+      - per-domain BN (baseline)
+      - per-domain SE channel adapters after every conv block
+      - per-domain linear head (instead of the shared frozen fc)
+    Warm-started from the D1 classifier at checkpoint load time.
+    """
+
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1):
+        super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
+                         fmax, classes_num, nb_tasks)
+        self.fc_heads = nn.ModuleList(
+            [nn.Linear(2048, classes_num) for _ in range(nb_tasks)])
+
+    def _make_adapter(self, channels):
+        return SEBlock(channels)
+
+    def on_checkpoint_loaded(self, loaded_task):
+        if loaded_task == 0:
+            with torch.no_grad():
+                for head in self.fc_heads:
+                    head.weight.copy_(self.fc.weight)
+                    head.bias.copy_(self.fc.bias)
+
+    def forward(self, input, task=1):
+        x = self.spectrogram_extractor(input)
+        x = self.logmel_extractor(x)
+        x = x.transpose(1, 3)
+        x = self.bn0[task](x)
+        x = x.transpose(1, 3)
+
+        blocks = [self.conv_block1, self.conv_block2, self.conv_block3,
+                  self.conv_block4, self.conv_block5, self.conv_block6]
+        adapt = self.adapters[task]
+        for i, blk in enumerate(blocks):
+            x = blk(x, pool_size=(2, 2), pool_type='avg', task=task)
+            x = adapt[i](x)
+            x = F.dropout(x, p=0.2, training=self.training)
+
+        x = torch.mean(x, dim=3)
+        (x1, _) = torch.max(x, dim=2)
+        x2 = torch.mean(x, dim=2)
+        x = x1 + x2
+
+        if task == 0:
+            return self.fc(x)          # D1: original pretrained head
+        return self.fc_heads[task](x)
+
+
+# ---------------------------------------------------------------------------
+# New Idea C -- Residual Bottleneck adapters  (bn_res)
+# ---------------------------------------------------------------------------
+
+class ResBottleneck(nn.Module):
+    """
+    Zero-initialised 1x1-conv residual adapter.
+    Starts as identity (safe for pretrained D1 features), then learns
+    domain-specific feature shifts without touching the shared backbone.
+    """
+
+    def __init__(self, channels, bottleneck_ratio=4):
+        super().__init__()
+        hidden = max(channels // bottleneck_ratio, 8)
+        self.down = nn.Conv2d(channels, hidden, kernel_size=1, bias=False)
+        self.up   = nn.Conv2d(hidden, channels, kernel_size=1, bias=True)
+        # Zero-init so adapter starts as identity residual
+        nn.init.zeros_(self.up.weight)
+        nn.init.zeros_(self.up.bias)
+
+    def forward(self, x):
+        return x + self.up(F.relu(self.down(x)))
+
+
+class MCnn14Res(_AdapterNet):
+    """Residual bottleneck conv adapters after each conv block."""
+    def _make_adapter(self, channels):
+        return ResBottleneck(channels)
+
+
+# ---------------------------------------------------------------------------
 # Idea #4 -- per-domain ATTENTION-POOLING head (PANNs AttBlock style)
 # ---------------------------------------------------------------------------
 
