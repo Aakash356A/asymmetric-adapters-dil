@@ -337,7 +337,7 @@ def train(args):
         auto_name = '{}_lr{}_bs{}_ep{}'.format(
             args.model_type.upper(), args.learning_rate, args.batch_size, args.epoch)
         config.save_resume_path = os.path.join(
-            '/home/aakashd/Dcase_task7/checkpoints', auto_name)
+            '/home/aakashd/dcase_task7/checkpoints', auto_name)
 
     seen_domains = []
     model = Learner(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,

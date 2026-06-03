@@ -8,8 +8,8 @@
 # Each experiment gets its own checkpoint dir and train.log.
 # ================================================================
 
-BASE_DIR="/home/aakashd/Dcase_task7"
-SCRIPT="$BASE_DIR/dcase2026_task7_baseline/baseline/baseline_DIL_task7.py"
+BASE_DIR="/home/aakashd/dcase_task7"
+SCRIPT="$BASE_DIR/code/baseline/baseline_DIL_task7.py"
 D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
 NUM_WORKERS=16
@@ -99,16 +99,16 @@ run_experiment() {
 #          model_type  lr      bs    epochs   [tag]
 
 # --- baseline (always keep one as the reference point) -------------------
-run_experiment bn       1e-4    32    120      baseline_repro3
+# run_experiment bn       1e-4    32    120      baseline_repro3
 
 # --- NEW architecture experiments (idea #1-#4) --------------------------
 # All use the best-known baseline recipe (lr=1e-4, bs=32, ep=120) so the
 # only thing that changes vs. the baseline is the architecture.
-run_experiment bn_clf   1e-4    32    120      perdomain_head        # #1 per-domain linear head
-run_experiment bn_cos   1e-4    32    120      perdomain_cosine      # #2 per-domain cosine/NCM head
-run_experiment bn_film  1e-4    32    120      film_adapters         # #3a per-domain FiLM adapters
-run_experiment bn_se    1e-4    32    120      se_adapters           # #3b per-domain SE adapters
-run_experiment bn_att   1e-4    32    120      attention_pooling     # #4  per-domain attention pooling
+# run_experiment bn_clf   1e-4    32    120      perdomain_head        # #1 per-domain linear head
+# run_experiment bn_cos   1e-4    32    120      perdomain_cosine      # #2 per-domain cosine/NCM head
+# run_experiment bn_film  1e-4    32    120      film_adapters         # #3a per-domain FiLM adapters
+run_experiment bn_se_freeze    1e-4    32    120      se_freeze_backbone           # #3b per-domain SE adapters
+# run_experiment bn_att   1e-4    32    120      attention_pooling     # #4  per-domain attention pooling
 
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
