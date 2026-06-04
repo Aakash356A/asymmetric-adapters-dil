@@ -19,3 +19,9 @@
 2026-06-03 18:15:27 | BN_SE_DEEP_lr1e-3_bs32_ep120_deeper_se_adapters | D2=69.17% | D3=41.81% | Avg=55.49% | DONE
 2026-06-03 18:33:25 | BN_SE_CLF_lr1e-3_bs32_ep120_se_plus_domain_head | D2=72.14% | D3=46.9%  | Avg=59.519999999999996% | DONE
 2026-06-03 18:51:19 | BN_RES_lr1e-3_bs32_ep120_residual_bottleneck  | D2=73.87% | D3=53.47% | Avg=63.67% | DONE
+2026-06-04 13:56:30 | BN_GN_lr1e-3_bs32_ep120_groupnorm_baseline    | D2=20.81% | D3=9.31%  | Avg=15.059999999999999% | DONE
+2026-06-04 14:15:03 | BN_GN_SE_lr1e-3_bs32_ep120_groupnorm_plus_se  | D2=24.41% | D3=13.52% | Avg=18.965% | DONE
+2026-06-04 15:13:12 | BN_SE_lr1e-3_bs32_ep120_bar_lambda0.5         | D2=49.45% | D3=34.99% | Avg=42.22% | DONE
+2026-06-04 16:00:47 | BN_SE_lr1e-3_bs32_ep120_bar_lambda1.0         | D2=47.26% | D3=33.37% | Avg=40.315% | DONE
+2026-06-04 16:18:19 | BN_GN_lr1e-3_bs32_ep120_groupnorm_baseline    | D2=20.97% | D3=9.31%  | Avg=15.14% | DONE
+2026-06-04 16:26:01 | BN_GN_SE_lr1e-3_bs32_ep120_groupnorm_plus_se  | D2=27.7%  | D3=-%     | Avg=27.7%  | FAILED(exit=120)

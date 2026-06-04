@@ -115,18 +115,22 @@ run_experiment() {
 # run_experiment bn_att   1e-4    32    120      attention_pooling     # #4  per-domain attention pooling
 
 # --- new experiments to close D2→D3 gap ---------------------------------
-run_experiment bn_se_deep  1e-3    32    120      deeper_se_adapters    # A: 2-layer SE bottleneck
-run_experiment bn_se_clf   1e-3    32    120      se_plus_domain_head   # B: SE adapters + per-domain head
-run_experiment bn_res      1e-3    32    120      residual_bottleneck   # C: zero-init residual conv adapters
+# run_experiment bn_se_deep  1e-3    32    120      deeper_se_adapters    # A: 2-layer SE bottleneck
+# run_experiment bn_se_clf   1e-3    32    120      se_plus_domain_head   # B: SE adapters + per-domain head
+# run_experiment bn_res      1e-3    32    120      residual_bottleneck   # C: zero-init residual conv adapters
 
 # --- GroupNorm variants --------------------------------------------------
-run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
-run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
+# run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
+# run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
 
 # --- Boundary-Aware Regularization (PACE) on best model so far ----------
 #          model    lr     bs   ep   tag                    lambda_reg
 run_experiment bn_se  1e-3  32  120  bar_lambda0.5           0.5
 run_experiment bn_se  1e-3  32  120  bar_lambda1.0           1.0
+
+# --- GroupNorm variants --------------------------------------------------
+run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
+run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
 
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4

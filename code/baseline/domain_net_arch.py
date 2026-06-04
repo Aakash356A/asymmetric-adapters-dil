@@ -385,8 +385,13 @@ class MCnn14Res(_AdapterNet):
 #   _TASK_PREFIXES and checkpoint loading work without modification.
 # ---------------------------------------------------------------------------
 
-def _make_gn(num_channels, num_groups=8):
-    """GroupNorm with graceful fallback if num_channels % num_groups != 0."""
+def _make_gn(num_channels, num_groups=16):
+    """GroupNorm with better group size selection.
+    
+    Default num_groups=16 gives ~32-128 channels per group depending on layer,
+    which is better for capturing local statistics than num_groups=8 (64-256 per group).
+    Falls back to smaller groups if divisibility requires it.
+    """
     g = num_groups
     while num_channels % g != 0 and g > 1:
         g //= 2
@@ -424,8 +429,24 @@ class ConvBlockGN(nn.Module):
         raise Exception('Incorrect pool_type argument!')
 
 
-def _replace_bn_with_gn(model, mel_bins, nb_tasks, num_groups=8):
-    """Replace all per-domain BN layers in a model with per-domain GN in-place."""
+def _replace_bn_with_gn(model, mel_bins, nb_tasks, num_groups=16):
+    """Replace all per-domain BN layers in a model with per-domain GN in-place.
+    
+    IMPORTANT: GN and BN have different semantics:
+    - BN normalizes across the batch dimension (uses batch statistics)
+    - GN normalizes within each sample across groups (no batch dependency)
+    
+    When a checkpoint trained with BN is loaded into GN layers, the learned
+    parameters (weight, bias) are no longer optimal because they were tuned
+    for different normalization statistics. For this reason:
+    
+    1. For D1 (task 0): The checkpoint is loaded, but GN parameters will be
+       sub-optimal. Consider NOT freezing the BN parameters during D2/D3 training
+       to allow them to re-calibrate.
+    
+    2. For D2/D3 (task > 0): The GN parameters are randomly initialized, which
+       is correct and doesn't suffer from the mismatch issue.
+    """
     model.bn0 = nn.ModuleList(
         [_make_gn(mel_bins, num_groups) for _ in range(nb_tasks)])
     model.conv_block1 = ConvBlockGN(1,    64,   nb_tasks, num_groups)
@@ -443,10 +464,17 @@ class MCnn14GN(_ArchBase):
     Identical to the BN baseline but every per-domain BatchNorm is replaced
     by per-domain GroupNorm.  No adapters, no extra heads — the only change
     is the normalisation layer.  Useful to isolate the effect of GN vs BN.
+    
+    NOTE: GN has different semantics than BN (normalizes within-sample instead of
+    across-batch). Performance may be lower, especially on D1 where the checkpoint
+    was trained with BN. To improve performance:
+    1. Use num_groups=16 (default, instead of 8) for better within-sample statistics
+    2. Allow GN parameters to be re-calibrated on D2/D3 even for frozen backbone
+    3. Consider using bn_gn_se (GN + SE adapters) for additional per-domain capacity
     """
 
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
-                 fmax, classes_num, nb_tasks=1, num_groups=8):
+                 fmax, classes_num, nb_tasks=1, num_groups=16):
         super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
                          fmax, classes_num, nb_tasks)
         _replace_bn_with_gn(self, mel_bins, nb_tasks, num_groups)
@@ -460,10 +488,13 @@ class MCnn14GNSE(_AdapterNet):
     channel recalibration of SE adapters — the two mechanisms are
     complementary: GN stabilises the normalisation statistics while SE
     adjusts which channels matter per domain.
+    
+    SE adapters may help mitigate the GN-vs-BN semantic mismatch on D1.
+    Uses num_groups=16 (default) for better within-sample normalization.
     """
 
     def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
-                 fmax, classes_num, nb_tasks=1, num_groups=8):
+                 fmax, classes_num, nb_tasks=1, num_groups=16):
         super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
                          fmax, classes_num, nb_tasks)
         _replace_bn_with_gn(self, mel_bins, nb_tasks, num_groups)
