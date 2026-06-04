@@ -107,7 +107,7 @@ run_experiment() {
 # run_experiment bn_clf   1e-4    32    120      perdomain_head        # #1 per-domain linear head
 # run_experiment bn_cos   1e-4    32    120      perdomain_cosine      # #2 per-domain cosine/NCM head
 # run_experiment bn_film  1e-4    32    120      film_adapters         # #3a per-domain FiLM adapters
-run_experiment bn_se_freeze    1e-4    32    120      se_freeze_backbone           # #3b per-domain SE adapters
+# run_experiment bn_se_freeze    1e-4    32    120      se_freeze_backbone           # #3b per-domain SE adapters
 # run_experiment bn_att   1e-4    32    120      attention_pooling     # #4  per-domain attention pooling
 
 # --- new experiments to close D2→D3 gap ---------------------------------

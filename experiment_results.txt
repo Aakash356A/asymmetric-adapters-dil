@@ -15,3 +15,7 @@
 2026-06-03 12:49:12 | BN_SE_lr1e-4_bs32_ep120_se_adapters           | D2=61.82% | D3=38.21% | Avg=50.015% | DONE
 2026-06-03 13:06:19 | BN_ATT_lr1e-4_bs32_ep120_attention_pooling    | D2=58.37% | D3=35.61% | Avg=46.989999999999995% | DONE
 2026-06-03 16:18:24 | BN_SE_lr1e-3_bs32_ep120_se_adapters           | D2=70.27% | D3=45.04% | Avg=57.655% | DONE
+2026-06-03 17:56:10 | BN_SE_FREEZE_lr1e-4_bs32_ep120_se_freeze_backbone | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=2)
+2026-06-03 18:15:27 | BN_SE_DEEP_lr1e-3_bs32_ep120_deeper_se_adapters | D2=69.17% | D3=41.81% | Avg=55.49% | DONE
+2026-06-03 18:33:25 | BN_SE_CLF_lr1e-3_bs32_ep120_se_plus_domain_head | D2=72.14% | D3=46.9%  | Avg=59.519999999999996% | DONE
+2026-06-03 18:51:19 | BN_RES_lr1e-3_bs32_ep120_residual_bottleneck  | D2=73.87% | D3=53.47% | Avg=63.67% | DONE
