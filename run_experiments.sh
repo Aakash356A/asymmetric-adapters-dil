@@ -119,6 +119,10 @@ run_experiment bn_se_deep  1e-3    32    120      deeper_se_adapters    # A: 2-l
 run_experiment bn_se_clf   1e-3    32    120      se_plus_domain_head   # B: SE adapters + per-domain head
 run_experiment bn_res      1e-3    32    120      residual_bottleneck   # C: zero-init residual conv adapters
 
+# --- GroupNorm variants --------------------------------------------------
+run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
+run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
+
 # --- Boundary-Aware Regularization (PACE) on best model so far ----------
 #          model    lr     bs   ep   tag                    lambda_reg
 run_experiment bn_se  1e-3  32  120  bar_lambda0.5           0.5
