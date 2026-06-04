@@ -22,7 +22,8 @@ from domain_net import MCnn14
 from domain_net_dtn import MCnn14DTN, MCnn14Mixed
 from domain_net_arch import (MCnn14CLF, MCnn14Cos, MCnn14FiLM,
                              MCnn14SE, MCnn14Att,
-                             MCnn14SEDeep, MCnn14SEClf, MCnn14Res)
+                             MCnn14SEDeep, MCnn14SEClf, MCnn14Res,
+                             MCnn14GN, MCnn14GNSE)
 
 from datasetfactory_task7 import DILDatasetInc as DILDataset
 from sklearn import metrics
@@ -31,6 +32,101 @@ from utilities import *
 import time
 
 timestr = time.strftime("%Y%m%d-%H%M%S")
+
+
+# ============================================================================
+# Boundary-Aware Regularization  (adapted from PACE, Li et al. 2026)
+#
+# For each training sample we generate N_p time-frequency masked versions
+# ("boundary probes") and apply a push-pull hinge loss:
+#
+#   L_reg = max(0, δ + pull_term − push_term)
+#
+#   pull_term = ||emb(clean) − centroid_c||²
+#               (pulls clean embedding toward its class centre)
+#
+#   push_term = min_k ||emb(clean) − emb(probe_k)||²
+#               (pushes clean embedding away from boundary probes)
+#
+# The log-mel spectrogram is extracted ONCE per batch (no gradient),
+# then the conv stack is run ONCE with gradient (clean) and N_p times
+# without gradient (probes), keeping the overhead manageable.
+# ============================================================================
+
+class BoundaryAwareReg:
+    """Boundary-Aware Regularization from PACE (Li et al., arXiv 2602.03355)."""
+
+    def __init__(self, num_classes, n_perturb=4,
+                 mask_t_ratio=0.15, mask_f_ratio=0.15, margin=1.0):
+        self.num_classes  = num_classes
+        self.n_perturb    = n_perturb
+        self.mask_t_ratio = mask_t_ratio
+        self.mask_f_ratio = mask_f_ratio
+        self.margin       = margin
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _tf_mask(spec, t_ratio, f_ratio):
+        """Return a randomly time-frequency masked copy of spec (B,1,T,F)."""
+        x = spec.clone()
+        _, _, T, F = x.shape
+        # time masking
+        t_len   = max(1, int(T * t_ratio * (0.5 + torch.rand(1).item())))
+        t_start = torch.randint(0, max(T - t_len, 1), (1,)).item()
+        x[:, :, t_start:t_start + t_len, :] = 0.0
+        # frequency masking
+        f_len   = max(1, int(F * f_ratio * (0.5 + torch.rand(1).item())))
+        f_start = torch.randint(0, max(F - f_len, 1), (1,)).item()
+        x[:, :, :, f_start:f_start + f_len] = 0.0
+        return x
+
+    # ------------------------------------------------------------------
+    def compute_loss(self, model, audio, labels, task):
+        """
+        model  : MCnn14 (or subclass) – must have spectrogram_extractor,
+                 logmel_extractor, and get_embedding_from_spec()
+        audio  : (B, T_audio)  raw waveform on the correct device
+        labels : (B,)          integer class indices
+        task   : int           current domain index
+        """
+        if not hasattr(model, 'get_embedding_from_spec'):
+            return torch.tensor(0.0, device=audio.device)
+
+        # ── extract log-mel once (no grad – spec extractor is frozen) ──
+        with torch.no_grad():
+            spec = model.spectrogram_extractor(audio)   # (B,1,T_stft,F)
+            spec = model.logmel_extractor(spec)          # (B,1,T,mel_bins)
+
+        # ── clean embedding WITH gradient ──────────────────────────────
+        clean_emb = model.get_embedding_from_spec(spec, task)   # (B, D)
+        B, D = clean_emb.shape
+
+        # ── boundary probe embeddings  (no gradient) ───────────────────
+        boundary_embs = []
+        with torch.no_grad():
+            for _ in range(self.n_perturb):
+                masked = self._tf_mask(spec, self.mask_t_ratio, self.mask_f_ratio)
+                boundary_embs.append(model.get_embedding_from_spec(masked, task))
+        boundary_embs = torch.stack(boundary_embs, dim=1)   # (B, N_p, D)
+
+        # ── batch centroids (mean clean emb per class, detached) ───────
+        centroids = torch.zeros(self.num_classes, D, device=audio.device)
+        for c in range(self.num_classes):
+            mask = labels == c
+            if mask.sum() > 0:
+                centroids[c] = clean_emb[mask].detach().mean(0)
+        class_centroids = centroids[labels]                 # (B, D)
+
+        # ── pull: distance to class centroid ───────────────────────────
+        pull = torch.sum((clean_emb - class_centroids) ** 2, dim=-1)   # (B,)
+
+        # ── push: min distance to boundary probes ──────────────────────
+        dists = torch.sum(
+            (clean_emb.unsqueeze(1) - boundary_embs) ** 2, dim=-1)     # (B, N_p)
+        push  = dists.min(dim=1)[0]                                     # (B,)
+
+        # ── hinge loss ─────────────────────────────────────────────────
+        return torch.mean(torch.clamp(self.margin + pull - push, min=0.0))
 
 
 def _compute_accuracy(model, loader, task, device):
@@ -138,6 +234,8 @@ class Learner():
             'bn_se_deep': MCnn14SEDeep,
             'bn_se_clf':  MCnn14SEClf,
             'bn_res':     MCnn14Res,
+            'bn_gn':      MCnn14GN,
+            'bn_gn_se':   MCnn14GNSE,
         }
         Model = _model_zoo.get(model_type, MCnn14)   # default / 'bn' -> baseline
         self.model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
@@ -202,12 +300,25 @@ class Learner():
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
 
+        # -- Boundary-Aware Regularization (PACE) -----------------------
+        lambda_reg = getattr(args, 'lambda_reg', 0.0)
+        bar = BoundaryAwareReg(
+            num_classes  = config.classes_num_DIL,
+            n_perturb    = getattr(args, 'n_perturb', 4),
+            mask_t_ratio = 0.15,
+            mask_f_ratio = 0.15,
+            margin       = 1.0,
+        ) if lambda_reg > 0.0 else None
+        if bar:
+            print(f'  [BAR] boundary-aware reg enabled  '
+                  f'lambda={lambda_reg}  n_perturb={bar.n_perturb}')
+        # ---------------------------------------------------------------
+
         for epoch_idx in range(1, args.epoch + 1):
             self.model.train()
 
             sum_loss = 0
-            sum_dist_loss = 0
-            sum_class_loss = 0
+            sum_reg_loss = 0
             for batch_idx, (audio, target, _) in enumerate(train_loader):
                 optimizer.zero_grad()
                 audio = audio.float()
@@ -217,7 +328,15 @@ class Learner():
                 target_indices = torch.argmax(target, dim=-1)
 
                 logits = self.model(audio, self.cur_task) #cur_task is from 0, D1:0, D2:1, D3:2
-                loss = criteria(logits, target_indices)
+                ce_loss = criteria(logits, target_indices)
+
+                if bar is not None:
+                    reg_loss = bar.compute_loss(
+                        self.model, audio, target_indices, self.cur_task)
+                    loss = ce_loss + lambda_reg * reg_loss
+                    sum_reg_loss += reg_loss.item()
+                else:
+                    loss = ce_loss
 
                 sum_loss += loss.item()
                 loss.backward()
@@ -225,8 +344,12 @@ class Learner():
                 step += 1
 
                 if (batch_idx + 1) % check_point == 0 or (batch_idx + 1) == len(train_loader):
-                    print('==>>> epoch: {}, batch index: {}, step: {}, train loss: {:.3f}'.
-                          format(epoch_idx, batch_idx + 1, step, sum_loss / (batch_idx + 1)))
+                    reg_str = (f'  reg: {sum_reg_loss / (batch_idx + 1):.3f}'
+                               if bar else '')
+                    print('==>>> epoch: {}, batch index: {}, step: {}, '
+                          'train loss: {:.3f}{}'.format(
+                              epoch_idx, batch_idx + 1, step,
+                              sum_loss / (batch_idx + 1), reg_str))
 
             scheduler.step()
             torch.cuda.empty_cache()
@@ -379,16 +502,24 @@ if __name__ == '__main__':
     parser_train.add_argument('--model_type', type=str,
                               choices=['bn', 'dtn', 'mixed',
                                        'bn_clf', 'bn_cos', 'bn_film', 'bn_se', 'bn_att',
-                                       'bn_se_deep', 'bn_se_clf', 'bn_res'],
+                                       'bn_se_deep', 'bn_se_clf', 'bn_res',
+                                       'bn_gn', 'bn_gn_se'],
                               default='dtn',
                               help='bn=BatchNorm baseline; dtn=DTN for D2+D3; mixed=BN D2/DTN D3; '
                                    'bn_clf=per-domain linear head; bn_cos=per-domain cosine head; '
                                    'bn_film=FiLM adapters; bn_se=SE adapters; bn_att=attention pooling; '
                                    'bn_se_deep=deeper 2-layer SE adapters; '
                                    'bn_se_clf=SE adapters + per-domain head; '
-                                   'bn_res=residual bottleneck conv adapters')
+                                   'bn_res=residual bottleneck conv adapters; '
+                                   'bn_gn=GroupNorm baseline (no running stats); '
+                                   'bn_gn_se=GroupNorm + SE adapters')
     parser_train.add_argument('--checkpoint_dir', type=str, default=None,
                               help='Override config.save_resume_path for this run')
+    parser_train.add_argument('--lambda_reg', type=float, default=0.0,
+                              help='Weight for boundary-aware regularization loss '
+                                   '(0 = disabled). Try 0.5 or 1.0.')
+    parser_train.add_argument('--n_perturb', type=int, default=4,
+                              help='Number of TF-masked probes per sample for BAR')
     # Parse arguments
     args = parser.parse_args()
     args.filename = get_filename(__file__)

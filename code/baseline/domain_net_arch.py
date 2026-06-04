@@ -216,13 +216,12 @@ class _AdapterNet(_ArchBase):
                     [self._make_adapter(c) for c in _BLOCK_CHANNELS]))
         self.adapters = nn.ModuleList(adapters)
 
-    def forward(self, input, task=1):
-        x = self.spectrogram_extractor(input)
-        x = self.logmel_extractor(x)
-        x = x.transpose(1, 3)
+    def get_embedding_from_spec(self, spec, task=1):
+        """Adapter-aware embedding from a (B, 1, T, mel_bins) log-mel spectrogram.
+        Overrides MCnn14.get_embedding_from_spec to include per-domain adapters."""
+        x = spec.transpose(1, 3)
         x = self.bn0[task](x)
         x = x.transpose(1, 3)
-
         blocks = [self.conv_block1, self.conv_block2, self.conv_block3,
                   self.conv_block4, self.conv_block5, self.conv_block6]
         adapt = self.adapters[task]
@@ -230,12 +229,21 @@ class _AdapterNet(_ArchBase):
             x = blk(x, pool_size=(2, 2), pool_type='avg', task=task)
             x = adapt[i](x)
             x = F.dropout(x, p=0.2, training=self.training)
-
         x = torch.mean(x, dim=3)
         (x1, _) = torch.max(x, dim=2)
         x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-        return self.fc(x)
+        return x1 + x2
+
+    def get_embedding(self, input, task=1):
+        """Adapter-aware embedding from raw waveform."""
+        spec = self.spectrogram_extractor(input)
+        spec = self.logmel_extractor(spec)
+        return self.get_embedding_from_spec(spec, task)
+
+    def forward(self, input, task=1):
+        x = self.spectrogram_extractor(input)
+        x = self.logmel_extractor(x)
+        return self.fc(self.get_embedding_from_spec(x, task))
 
 
 class MCnn14FiLM(_AdapterNet):
@@ -360,6 +368,108 @@ class MCnn14Res(_AdapterNet):
     """Residual bottleneck conv adapters after each conv block."""
     def _make_adapter(self, channels):
         return ResBottleneck(channels)
+
+
+# ---------------------------------------------------------------------------
+# GroupNorm variants  (bn_gn, bn_gn_se)
+#
+# Why GroupNorm instead of BatchNorm?
+#   BN computes statistics over the batch dimension and stores running
+#   mean/variance per domain.  When distributions shift across domains these
+#   running stats can mis-calibrate, causing extra forgetting.
+#   GN normalises within each sample across groups of channels — no running
+#   statistics, no cross-sample contamination.  GN affine params (weight,
+#   bias) warm-start from the D1 BN checkpoint since the keys are identical.
+#
+# Naming convention: norm layers are still called bnF / bnS / bn0 so that
+#   _TASK_PREFIXES and checkpoint loading work without modification.
+# ---------------------------------------------------------------------------
+
+def _make_gn(num_channels, num_groups=8):
+    """GroupNorm with graceful fallback if num_channels % num_groups != 0."""
+    g = num_groups
+    while num_channels % g != 0 and g > 1:
+        g //= 2
+    return nn.GroupNorm(g, num_channels)
+
+
+class ConvBlockGN(nn.Module):
+    """
+    Drop-in replacement for ConvBlock that uses per-domain GroupNorm.
+    Attribute names (bnF, bnS) are kept identical to ConvBlock so that
+    _TASK_PREFIXES matching and D1 checkpoint loading both work unchanged.
+    """
+
+    def __init__(self, in_channels, out_channels, nb_tasks, num_groups=8):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels,
+                               kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv2 = nn.Conv2d(out_channels, out_channels,
+                               kernel_size=3, stride=1, padding=1, bias=False)
+        self.bnF = nn.ModuleList(
+            [_make_gn(out_channels, num_groups) for _ in range(nb_tasks)])
+        self.bnS = nn.ModuleList(
+            [_make_gn(out_channels, num_groups) for _ in range(nb_tasks)])
+
+    def forward(self, input, pool_size=(2, 2), pool_type='avg', task=1):
+        x = F.relu_(self.bnF[task](self.conv1(input)))
+        x = F.relu_(self.bnS[task](self.conv2(x)))
+        if pool_type == 'max':
+            return F.max_pool2d(x, kernel_size=pool_size)
+        elif pool_type == 'avg':
+            return F.avg_pool2d(x, kernel_size=pool_size)
+        elif pool_type == 'avg+max':
+            return (F.avg_pool2d(x, kernel_size=pool_size)
+                    + F.max_pool2d(x, kernel_size=pool_size))
+        raise Exception('Incorrect pool_type argument!')
+
+
+def _replace_bn_with_gn(model, mel_bins, nb_tasks, num_groups=8):
+    """Replace all per-domain BN layers in a model with per-domain GN in-place."""
+    model.bn0 = nn.ModuleList(
+        [_make_gn(mel_bins, num_groups) for _ in range(nb_tasks)])
+    model.conv_block1 = ConvBlockGN(1,    64,   nb_tasks, num_groups)
+    model.conv_block2 = ConvBlockGN(64,   128,  nb_tasks, num_groups)
+    model.conv_block3 = ConvBlockGN(128,  256,  nb_tasks, num_groups)
+    model.conv_block4 = ConvBlockGN(256,  512,  nb_tasks, num_groups)
+    model.conv_block5 = ConvBlockGN(512,  1024, nb_tasks, num_groups)
+    model.conv_block6 = ConvBlockGN(1024, 2048, nb_tasks, num_groups)
+
+
+class MCnn14GN(_ArchBase):
+    """
+    Pure GroupNorm baseline  (--model_type bn_gn).
+
+    Identical to the BN baseline but every per-domain BatchNorm is replaced
+    by per-domain GroupNorm.  No adapters, no extra heads — the only change
+    is the normalisation layer.  Useful to isolate the effect of GN vs BN.
+    """
+
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1, num_groups=8):
+        super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
+                         fmax, classes_num, nb_tasks)
+        _replace_bn_with_gn(self, mel_bins, nb_tasks, num_groups)
+
+
+class MCnn14GNSE(_AdapterNet):
+    """
+    GroupNorm + SE adapters  (--model_type bn_gn_se).
+
+    Combines the distribution-robustness of GroupNorm with the per-domain
+    channel recalibration of SE adapters — the two mechanisms are
+    complementary: GN stabilises the normalisation statistics while SE
+    adjusts which channels matter per domain.
+    """
+
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1, num_groups=8):
+        super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
+                         fmax, classes_num, nb_tasks)
+        _replace_bn_with_gn(self, mel_bins, nb_tasks, num_groups)
+
+    def _make_adapter(self, channels):
+        return SEBlock(channels)
 
 
 # ---------------------------------------------------------------------------
