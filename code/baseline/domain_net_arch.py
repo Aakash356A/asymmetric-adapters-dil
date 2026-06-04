@@ -216,13 +216,12 @@ class _AdapterNet(_ArchBase):
                     [self._make_adapter(c) for c in _BLOCK_CHANNELS]))
         self.adapters = nn.ModuleList(adapters)
 
-    def forward(self, input, task=1):
-        x = self.spectrogram_extractor(input)
-        x = self.logmel_extractor(x)
-        x = x.transpose(1, 3)
+    def get_embedding_from_spec(self, spec, task=1):
+        """Adapter-aware embedding from a (B, 1, T, mel_bins) log-mel spectrogram.
+        Overrides MCnn14.get_embedding_from_spec to include per-domain adapters."""
+        x = spec.transpose(1, 3)
         x = self.bn0[task](x)
         x = x.transpose(1, 3)
-
         blocks = [self.conv_block1, self.conv_block2, self.conv_block3,
                   self.conv_block4, self.conv_block5, self.conv_block6]
         adapt = self.adapters[task]
@@ -230,12 +229,21 @@ class _AdapterNet(_ArchBase):
             x = blk(x, pool_size=(2, 2), pool_type='avg', task=task)
             x = adapt[i](x)
             x = F.dropout(x, p=0.2, training=self.training)
-
         x = torch.mean(x, dim=3)
         (x1, _) = torch.max(x, dim=2)
         x2 = torch.mean(x, dim=2)
-        x = x1 + x2
-        return self.fc(x)
+        return x1 + x2
+
+    def get_embedding(self, input, task=1):
+        """Adapter-aware embedding from raw waveform."""
+        spec = self.spectrogram_extractor(input)
+        spec = self.logmel_extractor(spec)
+        return self.get_embedding_from_spec(spec, task)
+
+    def forward(self, input, task=1):
+        x = self.spectrogram_extractor(input)
+        x = self.logmel_extractor(x)
+        return self.fc(self.get_embedding_from_spec(x, task))
 
 
 class MCnn14FiLM(_AdapterNet):

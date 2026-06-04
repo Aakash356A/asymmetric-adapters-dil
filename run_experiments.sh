@@ -15,10 +15,11 @@ RESULTS_LOG="$BASE_DIR/experiment_results.txt"
 NUM_WORKERS=16
 
 # ----------------------------------------------------------------
-# run_experiment  <model_type>  <lr>  <batch_size>  <epochs>  [tag]
+# run_experiment  <model_type>  <lr>  <batch_size>  <epochs>  [tag]  [lambda_reg]
 #
-#   model_type : bn  (BatchNorm) | dtn (DynamicTanh)
+#   model_type : bn | bn_se | bn_se_deep | bn_se_clf | bn_res | ...
 #   tag        : optional free-text suffix for the folder name
+#   lambda_reg : boundary-aware regularization weight (default 0 = off)
 # ----------------------------------------------------------------
 run_experiment() {
     local model_type=$1
@@ -26,6 +27,7 @@ run_experiment() {
     local bs=$3
     local ep=$4
     local tag="${5:-}"
+    local lambda_reg="${6:-0.0}"
 
     # Build a human-readable experiment name
     local name="${model_type^^}_lr${lr}_bs${bs}_ep${ep}"
@@ -37,6 +39,7 @@ run_experiment() {
     echo ""
     echo "========================================================"
     echo "  Experiment : $name"
+    echo "  lambda_reg : $lambda_reg"
     echo "  Started    : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "========================================================"
 
@@ -56,6 +59,7 @@ run_experiment() {
         --epoch="$ep" \
         --model_type="$model_type" \
         --checkpoint_dir="$ckpt_dir" \
+        --lambda_reg="$lambda_reg" \
         --save 2>&1 | tee "$log_file"
     local py_exit="${PIPESTATUS[0]}"
 
@@ -114,6 +118,11 @@ run_experiment bn_se_freeze    1e-4    32    120      se_freeze_backbone        
 run_experiment bn_se_deep  1e-3    32    120      deeper_se_adapters    # A: 2-layer SE bottleneck
 run_experiment bn_se_clf   1e-3    32    120      se_plus_domain_head   # B: SE adapters + per-domain head
 run_experiment bn_res      1e-3    32    120      residual_bottleneck   # C: zero-init residual conv adapters
+
+# --- Boundary-Aware Regularization (PACE) on best model so far ----------
+#          model    lr     bs   ep   tag                    lambda_reg
+run_experiment bn_se  1e-3  32  120  bar_lambda0.5           0.5
+run_experiment bn_se  1e-3  32  120  bar_lambda1.0           1.0
 
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4

@@ -205,8 +205,12 @@ class MCnn14(nn.Module):
         """Returns the 2048-d global pooling embedding (before the FC layer)."""
         x = self.spectrogram_extractor(input)
         x = self.logmel_extractor(x)
+        return self.get_embedding_from_spec(x, task)
 
-        x = x.transpose(1, 3)
+    def get_embedding_from_spec(self, spec, task=1):
+        """Run from a pre-extracted (B, 1, T, mel_bins) log-mel spectrogram.
+        Allows callers to apply masking / perturbations before the conv stack."""
+        x = spec.transpose(1, 3)
         x = self.bn0[task](x)
         x = x.transpose(1, 3)
 
