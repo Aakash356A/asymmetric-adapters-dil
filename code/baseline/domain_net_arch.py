@@ -371,6 +371,90 @@ class MCnn14Res(_AdapterNet):
 
 
 # ---------------------------------------------------------------------------
+# Idea D -- Residual adapters + ADIL-style residual classifier  (bn_res_adil)
+#
+# ADIL (Mulimani & Mesaros, ICASSP 2025) key insight:
+#   logits = G1(emb) + Gt(emb)
+#   G1 = shared frozen D1 head  (carries universal class knowledge)
+#   Gt = per-domain correction  (zero-init → starts as identity, learns delta)
+#
+# Combined with ResBottleneck adapters this gives the model two complementary
+# adaptation mechanisms: spatial feature re-weighting (adapters) and a
+# domain-specific classifier correction on top of the D1 baseline.
+# ---------------------------------------------------------------------------
+
+class MCnn14ResAdil(_AdapterNet):
+    """
+    ResBottleneck adapters + ADIL residual classifier head.
+
+    Forward:  logits = fc(emb)  +  fc_heads[task](emb)
+              ↑ G1: frozen D1    ↑ Gt: zero-init, learns domain delta
+    """
+
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1):
+        super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
+                         fmax, classes_num, nb_tasks)
+        self.fc_heads = nn.ModuleList(
+            [nn.Linear(2048, classes_num) for _ in range(nb_tasks)])
+        # Zero-init: at start of each domain, fc_heads[t] = 0 → output = G1(emb)
+        for head in self.fc_heads:
+            nn.init.zeros_(head.weight)
+            nn.init.zeros_(head.bias)
+
+    def _make_adapter(self, channels):
+        return ResBottleneck(channels)
+
+    def forward(self, input, task=1):
+        emb = self.get_embedding(input, task)      # adapter-aware (B, 2048)
+        base = self.fc(emb)                        # G1: shared frozen head
+        if task == 0:
+            return base
+        return base + self.fc_heads[task](emb)     # ADIL: G1 + Gt
+
+
+# ---------------------------------------------------------------------------
+# Idea E -- Residual adapters + per-domain head  (bn_res_clf)
+#
+# Like MCnn14ResAdil but the per-domain head *replaces* G1 (warm-started from
+# D1) instead of adding to it.  This gives the domain head full control of the
+# classifier while the ResBottleneck adapters handle feature alignment.
+# ---------------------------------------------------------------------------
+
+class MCnn14ResClf(_AdapterNet):
+    """
+    ResBottleneck adapters + per-domain linear head (warm-started from D1).
+
+    Forward:  logits = fc_heads[task](emb)   (task > 0)
+              logits = fc(emb)               (task == 0, D1)
+    """
+
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1):
+        super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
+                         fmax, classes_num, nb_tasks)
+        self.fc_heads = nn.ModuleList(
+            [nn.Linear(2048, classes_num) for _ in range(nb_tasks)])
+
+    def _make_adapter(self, channels):
+        return ResBottleneck(channels)
+
+    def on_checkpoint_loaded(self, loaded_task):
+        # Warm-start every per-domain head from the pretrained D1 classifier.
+        if loaded_task == 0:
+            with torch.no_grad():
+                for head in self.fc_heads:
+                    head.weight.copy_(self.fc.weight)
+                    head.bias.copy_(self.fc.bias)
+
+    def forward(self, input, task=1):
+        emb = self.get_embedding(input, task)
+        if task == 0:
+            return self.fc(emb)
+        return self.fc_heads[task](emb)
+
+
+# ---------------------------------------------------------------------------
 # GroupNorm variants  (bn_gn, bn_gn_se)
 #
 # Why GroupNorm instead of BatchNorm?

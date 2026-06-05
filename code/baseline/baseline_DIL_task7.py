@@ -23,7 +23,8 @@ from domain_net_dtn import MCnn14DTN, MCnn14Mixed
 from domain_net_arch import (MCnn14CLF, MCnn14Cos, MCnn14FiLM,
                              MCnn14SE, MCnn14Att,
                              MCnn14SEDeep, MCnn14SEClf, MCnn14Res,
-                             MCnn14GN, MCnn14GNSE)
+                             MCnn14GN, MCnn14GNSE,
+                             MCnn14ResAdil, MCnn14ResClf)
 
 from datasetfactory_task7 import DILDatasetInc as DILDataset
 from sklearn import metrics
@@ -127,6 +128,70 @@ class BoundaryAwareReg:
 
         # ── hinge loss ─────────────────────────────────────────────────
         return torch.mean(torch.clamp(self.margin + pull - push, min=0.0))
+
+
+# ============================================================================
+# Supervised Contrastive Loss  (adapted from Khosla et al., NeurIPS 2020)
+#
+# Pulls embeddings of the same class together and pushes different-class
+# embeddings apart — a cleaner alternative to BAR that works directly on
+# clean embeddings without needing masked probes.
+#
+#   L_con = -1/|P(i)| Σ_{p∈P(i)}  log(
+#               exp(sim(zi, zp)/τ)
+#               ─────────────────────────────────────
+#               Σ_{a≠i} exp(sim(zi, za)/τ)
+#           )
+#
+# where P(i) = all samples with the same class label as i (excluding self).
+# ============================================================================
+
+class SupConLoss:
+    """Supervised Contrastive Loss auxiliary objective."""
+
+    def __init__(self, temperature=0.07):
+        self.temperature = temperature
+
+    def compute_loss(self, model, audio, labels, task):
+        """
+        model  : any model with get_embedding()
+        audio  : (B, T_audio) on device
+        labels : (B,) integer class indices
+        task   : current domain index
+        """
+        if not hasattr(model, 'get_embedding'):
+            return torch.tensor(0.0, device=audio.device)
+
+        emb = model.get_embedding(audio, task)       # (B, D)
+        emb = F.normalize(emb, dim=1)                # L2-normalise
+        B   = emb.shape[0]
+        if B < 2:
+            return torch.tensor(0.0, device=audio.device)
+
+        # ── pairwise cosine similarity (B, B) ──────────────────────────
+        sim = torch.matmul(emb, emb.T) / self.temperature
+
+        # Numerical stability: subtract row max
+        sim = sim - sim.max(dim=1, keepdim=True)[0].detach()
+
+        # ── positive mask: same class, different sample ─────────────────
+        lbl  = labels.view(-1, 1)
+        pos  = (lbl == lbl.T).float()
+        pos.fill_diagonal_(0.0)
+
+        # ── log-softmax denominator (exclude self) ──────────────────────
+        self_mask = torch.eye(B, dtype=torch.bool, device=audio.device)
+        exp_sim   = torch.exp(sim).masked_fill(self_mask, 0.0)
+        log_prob  = sim - torch.log(exp_sim.sum(dim=1, keepdim=True) + 1e-8)
+
+        # ── mean log-prob over positives (only for anchor with ≥1 pos) ──
+        num_pos = pos.sum(dim=1)
+        valid   = num_pos > 0
+        if not valid.any():
+            return torch.tensor(0.0, device=audio.device)
+
+        loss = -(pos * log_prob).sum(dim=1) / (num_pos + 1e-8)
+        return loss[valid].mean()
 
 
 def _compute_accuracy(model, loader, task, device):
@@ -234,8 +299,10 @@ class Learner():
             'bn_se_deep': MCnn14SEDeep,
             'bn_se_clf':  MCnn14SEClf,
             'bn_res':     MCnn14Res,
-            'bn_gn':      MCnn14GN,
-            'bn_gn_se':   MCnn14GNSE,
+            'bn_gn':       MCnn14GN,
+            'bn_gn_se':    MCnn14GNSE,
+            'bn_res_adil': MCnn14ResAdil,
+            'bn_res_clf':  MCnn14ResClf,
         }
         Model = _model_zoo.get(model_type, MCnn14)   # default / 'bn' -> baseline
         self.model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
@@ -312,13 +379,22 @@ class Learner():
         if bar:
             print(f'  [BAR] boundary-aware reg enabled  '
                   f'lambda={lambda_reg}  n_perturb={bar.n_perturb}')
+
+        # -- Supervised Contrastive Loss ---------------------------------
+        lambda_con = getattr(args, 'lambda_con', 0.0)
+        supcon = SupConLoss(
+            temperature=getattr(args, 'con_temp', 0.07)
+        ) if lambda_con > 0.0 else None
+        if supcon:
+            print(f'  [SupCon] contrastive loss enabled  '
+                  f'lambda={lambda_con}  temperature={supcon.temperature}')
         # ---------------------------------------------------------------
 
         for epoch_idx in range(1, args.epoch + 1):
             self.model.train()
 
             sum_loss = 0
-            sum_reg_loss = 0
+            sum_aux_loss = 0
             for batch_idx, (audio, target, _) in enumerate(train_loader):
                 optimizer.zero_grad()
                 audio = audio.float()
@@ -329,14 +405,19 @@ class Learner():
 
                 logits = self.model(audio, self.cur_task) #cur_task is from 0, D1:0, D2:1, D3:2
                 ce_loss = criteria(logits, target_indices)
+                loss = ce_loss
 
                 if bar is not None:
-                    reg_loss = bar.compute_loss(
+                    aux = bar.compute_loss(
                         self.model, audio, target_indices, self.cur_task)
-                    loss = ce_loss + lambda_reg * reg_loss
-                    sum_reg_loss += reg_loss.item()
-                else:
-                    loss = ce_loss
+                    loss = loss + lambda_reg * aux
+                    sum_aux_loss += aux.item()
+
+                if supcon is not None:
+                    aux = supcon.compute_loss(
+                        self.model, audio, target_indices, self.cur_task)
+                    loss = loss + lambda_con * aux
+                    sum_aux_loss += aux.item()
 
                 sum_loss += loss.item()
                 loss.backward()
@@ -344,12 +425,12 @@ class Learner():
                 step += 1
 
                 if (batch_idx + 1) % check_point == 0 or (batch_idx + 1) == len(train_loader):
-                    reg_str = (f'  reg: {sum_reg_loss / (batch_idx + 1):.3f}'
-                               if bar else '')
+                    aux_str = (f'  aux: {sum_aux_loss / (batch_idx + 1):.3f}'
+                               if (bar or supcon) else '')
                     print('==>>> epoch: {}, batch index: {}, step: {}, '
                           'train loss: {:.3f}{}'.format(
                               epoch_idx, batch_idx + 1, step,
-                              sum_loss / (batch_idx + 1), reg_str))
+                              sum_loss / (batch_idx + 1), aux_str))
 
             scheduler.step()
             torch.cuda.empty_cache()
@@ -503,7 +584,8 @@ if __name__ == '__main__':
                               choices=['bn', 'dtn', 'mixed',
                                        'bn_clf', 'bn_cos', 'bn_film', 'bn_se', 'bn_att',
                                        'bn_se_deep', 'bn_se_clf', 'bn_res',
-                                       'bn_gn', 'bn_gn_se'],
+                                       'bn_gn', 'bn_gn_se',
+                                       'bn_res_adil', 'bn_res_clf'],
                               default='dtn',
                               help='bn=BatchNorm baseline; dtn=DTN for D2+D3; mixed=BN D2/DTN D3; '
                                    'bn_clf=per-domain linear head; bn_cos=per-domain cosine head; '
@@ -512,7 +594,13 @@ if __name__ == '__main__':
                                    'bn_se_clf=SE adapters + per-domain head; '
                                    'bn_res=residual bottleneck conv adapters; '
                                    'bn_gn=GroupNorm baseline (no running stats); '
-                                   'bn_gn_se=GroupNorm + SE adapters')
+                                   'bn_gn_se=GroupNorm + SE adapters; '
+                                   'bn_res_adil=Res adapters + ADIL residual head; '
+                                   'bn_res_clf=Res adapters + per-domain head')
+    parser_train.add_argument('--lambda_con', type=float, default=0.0,
+                              help='Weight for supervised contrastive loss (0=off). Try 0.1 or 0.3.')
+    parser_train.add_argument('--con_temp', type=float, default=0.07,
+                              help='Temperature for supervised contrastive loss')
     parser_train.add_argument('--checkpoint_dir', type=str, default=None,
                               help='Override config.save_resume_path for this run')
     parser_train.add_argument('--lambda_reg', type=float, default=0.0,
