@@ -15,7 +15,7 @@
 # Results are appended to experiment_results.txt after every run.
 # ================================================================
 
-BASE_DIR="/home/aakashd/dcase_task7"
+BASE_DIR="/home/aakash/dcase_task7"
 SCRIPT="$BASE_DIR/code/baseline/baseline_DIL_task7.py"
 D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
@@ -167,50 +167,68 @@ q() {
 #   q / run_experiment  <model>  <lr>  <bs>  <ep>  [tag]  [λ_reg]  [λ_con]
 # ================================================================
 
-echo "================================================================"
-echo "  DCASE Task 7 – starting experiments  $(date '+%Y-%m-%d %H:%M:%S')"
-echo "  MAX_PARALLEL=$MAX_PARALLEL  PAR_WORKERS=$PAR_WORKERS"
-echo "================================================================"
+#          model_type  lr      bs    epochs   [tag]
 
-# ── Batch 1: ADIL head + lr sweep (3 jobs) ──────────────────────────────
-echo ""
-echo "--- Batch 1: ADIL / CLF heads + lr sweep ---"
-q bn_res_adil  1e-3  32  120  res_adil_head       # ADIL residual classifier
-q bn_res_clf   1e-3  32  120  res_clf_head         # per-domain head warm-started
-q bn_res       5e-4  32  120  lr_5e4               # lr sweep down
+# --- baseline (always keep one as the reference point) -------------------
+# run_experiment bn       1e-4    32    120      baseline_repro3
 
-# ── Batch 2: lr sweep + SupCon (3 jobs) ─────────────────────────────────
-echo ""
-echo "--- Batch 2: lr sweep + SupCon ---"
-q bn_res       2e-3  32  120  lr_2e3               # lr sweep up
-q bn_res       1e-3  32  120  supcon_0.1  0.0  0.1 # contrastive λ=0.1
-q bn_res       1e-3  32  120  supcon_0.3  0.0  0.3 # contrastive λ=0.3
+# --- NEW architecture experiments (idea #1-#4) --------------------------
+# All use the best-known baseline recipe (lr=1e-4, bs=32, ep=120) so the
+# only thing that changes vs. the baseline is the architecture.
+# run_experiment bn_clf   1e-4    32    120      perdomain_head        # #1 per-domain linear head
+# run_experiment bn_cos   1e-4    32    120      perdomain_cosine      # #2 per-domain cosine/NCM head
+# run_experiment bn_film  1e-4    32    120      film_adapters         # #3a per-domain FiLM adapters
+# run_experiment bn_se_freeze    1e-4    32    120      se_freeze_backbone           # #3b per-domain SE adapters
+# run_experiment bn_att   1e-4    32    120      attention_pooling     # #4  per-domain attention pooling
 
-# ── Batch 3: combo + remainder (flush any leftover) ─────────────────────
-echo ""
-echo "--- Batch 3: ADIL + SupCon combo ---"
-q bn_res_adil  1e-3  32  120  adil_supcon_0.1  0.0  0.1
+# --- new experiments to close D2→D3 gap ---------------------------------
+# run_experiment bn_se_deep  1e-3    32    120      deeper_se_adapters    # A: 2-layer SE bottleneck
+# run_experiment bn_se_clf   1e-3    32    120      se_plus_domain_head   # B: SE adapters + per-domain head
+# run_experiment bn_res      1e-3    32    120      residual_bottleneck   # C: zero-init residual conv adapters
 
-_flush_jobs   # drain any remaining jobs
+# --- GroupNorm variants --------------------------------------------------
+# run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
+# run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
 
-# ────────────────────────────────────────────────────────────────────────
-# Previous / archived experiments (commented out)
-# ────────────────────────────────────────────────────────────────────────
-# run_experiment bn       1e-4  32  120  baseline_repro3
-# run_experiment bn_clf   1e-4  32  120  perdomain_head
-# run_experiment bn_cos   1e-4  32  120  perdomain_cosine
-# run_experiment bn_film  1e-4  32  120  film_adapters
-# run_experiment bn_se    1e-3  32  120  se_adapters
-# run_experiment bn_se_deep 1e-3 32 120  deeper_se_adapters
-# run_experiment bn_se_clf  1e-3 32 120  se_plus_domain_head
-# run_experiment bn_res   1e-3  32  120  residual_bottleneck
-# run_experiment bn_gn    1e-3  32  120  groupnorm_baseline
-# run_experiment bn_gn_se 1e-3  32  120  groupnorm_plus_se
-# run_experiment bn_se    1e-3  32  120  bar_lambda0.5  0.5
-# run_experiment bn_se    1e-3  32  120  bar_lambda1.0  1.0
+# --- Boundary-Aware Regularization (PACE) on best model so far ----------
+#          model    lr     bs   ep   tag                    lambda_reg
+run_experiment bn_se  1e-3  32  120  bar_lambda0.5           0.5
+run_experiment bn_se  1e-3  32  120  bar_lambda1.0           1.0
 
-echo ""
-echo "================================================================"
-echo "  All experiments finished  $(date '+%Y-%m-%d %H:%M:%S')"
-echo "  Results: $RESULTS_LOG"
-echo "================================================================"
+# --- GroupNorm variants --------------------------------------------------
+run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
+run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
+
+# =====================================================================
+# NEW EXPERIMENTS — building on BN_RES (current best: D2=73.87% D3=53.47%)
+# =====================================================================
+
+# --- 1. ADIL residual head on BN_RES ---------------------------------
+# logits = G1(emb) + Gt(emb)  — shared head + zero-init domain correction
+#          model        lr     bs   ep   tag
+run_experiment bn_res_adil  1e-3  32  120  res_adil_head
+
+# --- 2. Per-domain head on BN_RES (warm-started, replaces G1) --------
+run_experiment bn_res_clf   1e-3  32  120  res_clf_head
+
+# --- 3. BN_RES learning rate sweep -----------------------------------
+# Best lr for residual adapters might not be 1e-3
+run_experiment bn_res  5e-4  32  120  lr_5e4
+run_experiment bn_res  2e-3  32  120  lr_2e3
+
+# --- 4. BN_RES + Supervised Contrastive Loss -------------------------
+# Pulls same-class embeddings together, pushes different-class apart
+# lambda_reg=0  lambda_con=X
+#          model   lr     bs   ep   tag              lreg  lcon
+run_experiment bn_res  1e-3  32  120  supcon_0.1     0.0   0.1
+run_experiment bn_res  1e-3  32  120  supcon_0.3     0.0   0.3
+
+# --- 5. BN_RES_ADIL + SupCon (best of both) --------------------------
+run_experiment bn_res_adil  1e-3  32  120  adil_supcon_0.1  0.0  0.1
+
+# --- extra sweeps to try once you see which idea wins -------------------
+# run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
+# run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
+# run_experiment bn_film  1e-4    32    150      film_adapters_ep150
+
+

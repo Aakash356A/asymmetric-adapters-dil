@@ -25,3 +25,7 @@
 2026-06-04 16:00:47 | BN_SE_lr1e-3_bs32_ep120_bar_lambda1.0         | D2=47.26% | D3=33.37% | Avg=40.315% | DONE
 2026-06-04 16:18:19 | BN_GN_lr1e-3_bs32_ep120_groupnorm_baseline    | D2=20.97% | D3=9.31%  | Avg=15.14% | DONE
 2026-06-04 16:26:01 | BN_GN_SE_lr1e-3_bs32_ep120_groupnorm_plus_se  | D2=27.7%  | D3=-%     | Avg=27.7%  | FAILED(exit=120)
+2026-06-05 13:38:58 | BN_RES_ADIL_lr1e-3_bs32_ep120_res_adil_head   | D2=76.06% | D3=52.85% | Avg=64.455% | DONE
+2026-06-05 14:15:45 | BN_RES_CLF_lr1e-3_bs32_ep120_res_clf_head     | D2=77.31% | D3=53.97% | Avg=65.64% | DONE
+2026-06-05 14:52:43 | BN_RES_lr5e-4_bs32_ep120_lr_5e4               | D2=72.77% | D3=52.36% | Avg=62.565% | DONE
+2026-06-05 14:54:37 | BN_RES_lr2e-3_bs32_ep120_lr_2e3               | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=120)
