@@ -227,6 +227,32 @@ q bn_res  1e-3  32  120  supcon_0.3     0.0   0.3
 q bn_res_adil  1e-3  32  120  adil_supcon_0.1  0.0  0.1
 _flush_jobs
 
+# =====================================================================
+# BATCH 4 — Combine two leaders: BN_RES_CLF + SupCon
+#
+# Leaders so far:
+#   BN_RES_CLF          D2=77.31%  D3=53.97%  Avg=65.64%
+#   BN_RES + SupCon 0.1 D2=77.62%  D3=53.72%  Avg=65.67%
+#   BN_RES + SupCon 0.3 D2=74.49%  D3=55.71%  Avg=65.10%  (best D3)
+#
+# Hypothesis: CLF gives a better per-domain classifier boundary,
+# SupCon tightens the embedding clusters — combining them should
+# push both D2 and D3 simultaneously.
+# =====================================================================
+
+echo ""
+echo "--- Batch 4: BN_RES_CLF + SupCon combos ---"
+#          model        lr    bs  ep   tag                  lreg  lcon
+q bn_res_clf  1e-3  32  120  clf_supcon_0.1          0.0   0.1
+q bn_res_clf  1e-3  32  120  clf_supcon_0.2          0.0   0.2
+q bn_res_clf  1e-3  32  120  clf_supcon_0.3          0.0   0.3
+
+echo ""
+echo "--- Batch 5: SupCon sweet-spot on base BN_RES ---"
+q bn_res      1e-3  32  120  supcon_0.2              0.0   0.2
+
+_flush_jobs
+
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
 # run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
