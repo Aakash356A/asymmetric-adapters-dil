@@ -28,4 +28,8 @@
 2026-06-05 13:38:58 | BN_RES_ADIL_lr1e-3_bs32_ep120_res_adil_head   | D2=76.06% | D3=52.85% | Avg=64.455% | DONE
 2026-06-05 14:15:45 | BN_RES_CLF_lr1e-3_bs32_ep120_res_clf_head     | D2=77.31% | D3=53.97% | Avg=65.64% | DONE
 2026-06-05 14:52:43 | BN_RES_lr5e-4_bs32_ep120_lr_5e4               | D2=72.77% | D3=52.36% | Avg=62.565% | DONE
-2026-06-05 14:54:37 | BN_RES_lr2e-3_bs32_ep120_lr_2e3               | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=120)
+
+2026-06-05 16:20:28 | BN_RES_lr2e-3_bs32_ep120_lr_2e3               | D2=74.49% | D3=53.85% | Avg=64.17% | DONE
+2026-06-05 16:53:51 | BN_RES_lr1e-3_bs32_ep120_supcon_0.1           | D2=77.62% | D3=53.72% | Avg=65.67% | DONE
+2026-06-05 19:16:16 | BN_RES_ADIL_lr1e-3_bs32_ep120_adil_supcon_0.1 | D2=74.96% | D3=53.72% | Avg=64.34% | DONE
+2026-06-05 19:16:19 | BN_RES_lr1e-3_bs32_ep120_supcon_0.3           | D2=74.49% | D3=55.71% | Avg=65.1%  | DONE

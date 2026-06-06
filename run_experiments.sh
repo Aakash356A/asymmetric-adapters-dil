@@ -21,7 +21,7 @@ D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
 
 # ── Parallel settings ────────────────────────────────────────────────────
-MAX_PARALLEL=3   # jobs to run at once  (12 GB GPU ÷ 3 ≈ 4 GB each)
+MAX_PARALLEL=2   # jobs to run at once  (12 GB GPU ÷ 3 ≈ 4 GB each)
                  # → set to 2 if you see CUDA OOM errors
 
 SER_WORKERS=16   # dataloader workers for serial runs
@@ -192,12 +192,12 @@ q() {
 
 # --- Boundary-Aware Regularization (PACE) on best model so far ----------
 #          model    lr     bs   ep   tag                    lambda_reg
-run_experiment bn_se  1e-3  32  120  bar_lambda0.5           0.5
-run_experiment bn_se  1e-3  32  120  bar_lambda1.0           1.0
+# run_experiment bn_se  1e-3  32  120  bar_lambda0.5           0.5
+# run_experiment bn_se  1e-3  32  120  bar_lambda1.0           1.0
 
-# --- GroupNorm variants --------------------------------------------------
-run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
-run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
+# # --- GroupNorm variants --------------------------------------------------
+# run_experiment bn_gn     1e-3  32  120  groupnorm_baseline   # GN only, no adapters
+# run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
 
 # =====================================================================
 # NEW EXPERIMENTS — building on BN_RES (current best: D2=73.87% D3=53.47%)
@@ -206,25 +206,26 @@ run_experiment bn_gn_se  1e-3  32  120  groupnorm_plus_se    # GN + SE adapters
 # --- 1. ADIL residual head on BN_RES ---------------------------------
 # logits = G1(emb) + Gt(emb)  — shared head + zero-init domain correction
 #          model        lr     bs   ep   tag
-run_experiment bn_res_adil  1e-3  32  120  res_adil_head
+# run_experiment bn_res_adil  1e-3  32  120  res_adil_head
 
-# --- 2. Per-domain head on BN_RES (warm-started, replaces G1) --------
-run_experiment bn_res_clf   1e-3  32  120  res_clf_head
+# # --- 2. Per-domain head on BN_RES (warm-started, replaces G1) --------
+# run_experiment bn_res_clf   1e-3  32  120  res_clf_head
 
-# --- 3. BN_RES learning rate sweep -----------------------------------
-# Best lr for residual adapters might not be 1e-3
-run_experiment bn_res  5e-4  32  120  lr_5e4
-run_experiment bn_res  2e-3  32  120  lr_2e3
+# # --- 3. BN_RES learning rate sweep -----------------------------------
+# # Best lr for residual adapters might not be 1e-3
+# q bn_res  5e-4  32  120  lr_5e4
+q bn_res  2e-3  32  120  lr_2e3
 
 # --- 4. BN_RES + Supervised Contrastive Loss -------------------------
 # Pulls same-class embeddings together, pushes different-class apart
 # lambda_reg=0  lambda_con=X
 #          model   lr     bs   ep   tag              lreg  lcon
-run_experiment bn_res  1e-3  32  120  supcon_0.1     0.0   0.1
-run_experiment bn_res  1e-3  32  120  supcon_0.3     0.0   0.3
+q bn_res  1e-3  32  120  supcon_0.1     0.0   0.1
+q bn_res  1e-3  32  120  supcon_0.3     0.0   0.3
 
 # --- 5. BN_RES_ADIL + SupCon (best of both) --------------------------
-run_experiment bn_res_adil  1e-3  32  120  adil_supcon_0.1  0.0  0.1
+q bn_res_adil  1e-3  32  120  adil_supcon_0.1  0.0  0.1
+_flush_jobs
 
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
