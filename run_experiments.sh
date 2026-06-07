@@ -214,18 +214,18 @@ q() {
 # # --- 3. BN_RES learning rate sweep -----------------------------------
 # # Best lr for residual adapters might not be 1e-3
 # q bn_res  5e-4  32  120  lr_5e4
-q bn_res  2e-3  32  120  lr_2e3
+# q bn_res  2e-3  32  120  lr_2e3
 
 # --- 4. BN_RES + Supervised Contrastive Loss -------------------------
 # Pulls same-class embeddings together, pushes different-class apart
 # lambda_reg=0  lambda_con=X
 #          model   lr     bs   ep   tag              lreg  lcon
-q bn_res  1e-3  32  120  supcon_0.1     0.0   0.1
-q bn_res  1e-3  32  120  supcon_0.3     0.0   0.3
+# q bn_res  1e-3  32  120  supcon_0.1     0.0   0.1
+# q bn_res  1e-3  32  120  supcon_0.3     0.0   0.3
 
 # --- 5. BN_RES_ADIL + SupCon (best of both) --------------------------
-q bn_res_adil  1e-3  32  120  adil_supcon_0.1  0.0  0.1
-_flush_jobs
+# q bn_res_adil  1e-3  32  120  adil_supcon_0.1  0.0  0.1
+# _flush_jobs
 
 # =====================================================================
 # BATCH 4 — Combine two leaders: BN_RES_CLF + SupCon
@@ -245,11 +245,19 @@ echo "--- Batch 4: BN_RES_CLF + SupCon combos ---"
 #          model        lr    bs  ep   tag                  lreg  lcon
 q bn_res_clf  1e-3  32  120  clf_supcon_0.1          0.0   0.1
 q bn_res_clf  1e-3  32  120  clf_supcon_0.2          0.0   0.2
-q bn_res_clf  1e-3  32  120  clf_supcon_0.3          0.0   0.3
 
 echo ""
 echo "--- Batch 5: SupCon sweet-spot on base BN_RES ---"
+q bn_res_clf  1e-3  32  120  clf_supcon_0.3          0.0   0.3
 q bn_res      1e-3  32  120  supcon_0.2              0.0   0.2
+
+echo ""
+echo "--- Batch 6: DTN2 (LayerNorm-style norm + tanh gate) ---"
+# dtn2 replaces the raw-activation DTN with a normalise-first variant:
+#   y = gamma * tanh(alpha * norm_C(x)) + beta
+# Should be more stable than plain DTN when conv output magnitudes vary.
+#          model   lr     bs  ep   tag
+q dtn2  1e-3  32  120  layernorm_tanh_gate
 
 _flush_jobs
 

@@ -19,7 +19,7 @@ from config_task7 import (sample_rate, mel_bins, fmin, fmax, window_size,
 import torch.optim as optim
 
 from domain_net import MCnn14
-from domain_net_dtn import MCnn14DTN, MCnn14Mixed
+from domain_net_dtn import MCnn14DTN, MCnn14Mixed, MCnn14DTN2
 from domain_net_arch import (MCnn14CLF, MCnn14Cos, MCnn14FiLM,
                              MCnn14SE, MCnn14Att,
                              MCnn14SEDeep, MCnn14SEClf, MCnn14Res,
@@ -290,6 +290,7 @@ class Learner():
 
         _model_zoo = {
             'dtn':        MCnn14DTN,
+            'dtn2':       MCnn14DTN2,
             'mixed':      MCnn14Mixed,
             'bn_clf':     MCnn14CLF,
             'bn_cos':     MCnn14Cos,
@@ -581,13 +582,13 @@ if __name__ == '__main__':
     parser_train.add_argument('--resume', action='store_true', default=False)
     parser_train.add_argument('--save', action='store_true', default=False)
     parser_train.add_argument('--model_type', type=str,
-                              choices=['bn', 'dtn', 'mixed',
+                              choices=['bn', 'dtn', 'dtn2', 'mixed',
                                        'bn_clf', 'bn_cos', 'bn_film', 'bn_se', 'bn_att',
                                        'bn_se_deep', 'bn_se_clf', 'bn_res',
                                        'bn_gn', 'bn_gn_se',
                                        'bn_res_adil', 'bn_res_clf'],
                               default='dtn',
-                              help='bn=BatchNorm baseline; dtn=DTN for D2+D3; mixed=BN D2/DTN D3; '
+                              help='bn=BatchNorm baseline; dtn=DTN for D2+D3; dtn2=LayerNorm+tanh gate; mixed=BN D2/DTN D3; '
                                    'bn_clf=per-domain linear head; bn_cos=per-domain cosine head; '
                                    'bn_film=FiLM adapters; bn_se=SE adapters; bn_att=attention pooling; '
                                    'bn_se_deep=deeper 2-layer SE adapters; '
