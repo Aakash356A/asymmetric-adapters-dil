@@ -38,3 +38,8 @@
 2026-06-06 18:04:11 | BN_RES_lr1e-3_bs32_ep120_supcon_0.2           | D2=77.31% | D3=56.08% | Avg=66.695% | DONE
 2026-06-06 18:04:17 | BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.3   | D2=77.62% | D3=55.33% | Avg=66.475% | DONE
 2026-06-06 19:06:53 | DTN2_lr1e-3_bs32_ep120_layernorm_tanh_gate    | D2=53.21% | D3=34.12% | Avg=43.665% | DONE
+2026-06-06 22:28:02 | BN_RES_lr1e-3_bs32_ep120_supcon_0.15          | D2=74.96% | D3=55.33% | Avg=65.145% | DONE
+2026-06-06 22:28:04 | BN_RES_lr1e-3_bs32_ep120_supcon_0.25          | D2=74.96% | D3=54.34% | Avg=64.65% | DONE
+2026-06-07 00:50:16 | BN_RES_lr1e-3_bs32_ep120_supcon_temp0.10      | D2=77.78% | D3=53.23% | Avg=65.505% | DONE
+2026-06-07 00:50:21 | BN_RES_lr1e-3_bs32_ep120_supcon_temp0.05      | D2=75.43% | D3=54.59% | Avg=65.01% | DONE
+2026-06-07 01:58:25 | BN_RES_lr1e-3_bs64_ep120_supcon_bs64          | D2=76.21% | D3=56.95% | Avg=66.58% | DONE

@@ -245,26 +245,26 @@ q() {
 # push both D2 and D3 simultaneously.
 # =====================================================================
 
-echo ""
-echo "--- Batch 4: BN_RES_CLF + SupCon combos ---"
-#          model        lr    bs  ep   tag                  lreg  lcon
-q bn_res_clf  1e-3  32  120  clf_supcon_0.1          0.0   0.1
-q bn_res_clf  1e-3  32  120  clf_supcon_0.2          0.0   0.2
+# echo ""
+# echo "--- Batch 4: BN_RES_CLF + SupCon combos ---"
+# #          model        lr    bs  ep   tag                  lreg  lcon
+# q bn_res_clf  1e-3  32  120  clf_supcon_0.1          0.0   0.1
+# q bn_res_clf  1e-3  32  120  clf_supcon_0.2          0.0   0.2
 
-echo ""
-echo "--- Batch 5: SupCon sweet-spot on base BN_RES ---"
-q bn_res_clf  1e-3  32  120  clf_supcon_0.3          0.0   0.3
-q bn_res      1e-3  32  120  supcon_0.2              0.0   0.2
+# echo ""
+# echo "--- Batch 5: SupCon sweet-spot on base BN_RES ---"
+# q bn_res_clf  1e-3  32  120  clf_supcon_0.3          0.0   0.3
+# q bn_res      1e-3  32  120  supcon_0.2              0.0   0.2
 
-echo ""
-echo "--- Batch 6: DTN2 (LayerNorm-style norm + tanh gate) ---"
+# echo ""
+# echo "--- Batch 6: DTN2 (LayerNorm-style norm + tanh gate) ---"
 # dtn2 replaces the raw-activation DTN with a normalise-first variant:
 #   y = gamma * tanh(alpha * norm_C(x)) + beta
 # Should be more stable than plain DTN when conv output magnitudes vary.
 #          model   lr     bs  ep   tag
-q dtn2  1e-3  32  120  layernorm_tanh_gate
+# q dtn2  1e-3  32  120  layernorm_tanh_gate
 
-_flush_jobs
+# _flush_jobs
 
 # =====================================================================
 # BATCH 6 — Fine-tune SupCon on BN_RES (current best: 66.70%)
