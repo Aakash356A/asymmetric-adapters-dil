@@ -47,6 +47,7 @@ run_experiment() {
     local tag="${5:-}"
     local lambda_reg="${6:-0.0}"
     local lambda_con="${7:-0.0}"
+    local con_temp="${8:-0.07}"
     local workers="${_PAR_WORKERS:-$SER_WORKERS}"
 
     # Human-readable experiment name
@@ -61,7 +62,7 @@ run_experiment() {
         echo ""
         echo "========================================================"
         echo "  Experiment : $name"
-        echo "  lambda_reg : $lambda_reg  lambda_con : $lambda_con"
+        echo "  lambda_reg : $lambda_reg  lambda_con : $lambda_con  con_temp : $con_temp"
         echo "  Started    : $(date '+%Y-%m-%d %H:%M:%S')"
         echo "========================================================"
     fi
@@ -83,6 +84,7 @@ run_experiment() {
             --checkpoint_dir="$ckpt_dir" \
             --lambda_reg="$lambda_reg" \
             --lambda_con="$lambda_con" \
+            --con_temp="$con_temp" \
             --save > "$log_file" 2>&1
         local py_exit=$?
     else
@@ -98,6 +100,7 @@ run_experiment() {
             --checkpoint_dir="$ckpt_dir" \
             --lambda_reg="$lambda_reg" \
             --lambda_con="$lambda_con" \
+            --con_temp="$con_temp" \
             --save 2>&1 | tee "$log_file"
         local py_exit=${PIPESTATUS[0]}
     fi
@@ -148,7 +151,9 @@ _flush_jobs() {
 # Syntax identical to run_experiment.
 q() {
     local name="${1^^}_lr${2}_bs${3}_ep${4}${5:+_$5}"
-    echo "  [+] queued: $name"
+    local lcon="${7:-0.0}"
+    local temp="${8:-0.07}"
+    echo "  [+] queued: $name  λ_con=$lcon  τ=$temp"
     _PARALLEL=1 _PAR_WORKERS=$PAR_WORKERS run_experiment "$@" &
     _job_pids+=($!)
     if (( ${#_job_pids[@]} >= MAX_PARALLEL )); then
@@ -258,6 +263,29 @@ echo "--- Batch 6: DTN2 (LayerNorm-style norm + tanh gate) ---"
 # Should be more stable than plain DTN when conv output magnitudes vary.
 #          model   lr     bs  ep   tag
 q dtn2  1e-3  32  120  layernorm_tanh_gate
+
+_flush_jobs
+
+# =====================================================================
+# BATCH 6 — Fine-tune SupCon on BN_RES (current best: 66.70%)
+#
+# Three axes to explore:
+#   A. Lambda fine-tuning  (λ=0.15 and λ=0.25)
+#   B. Temperature tuning  (τ=0.05 and τ=0.10, with best λ=0.2)
+#   C. Larger batch size   (bs=64 for more contrastive pairs per batch)
+# =====================================================================
+
+echo ""
+echo "--- Batch 6: SupCon fine-tuning on BN_RES ---"
+#        model   lr    bs   ep   tag               lreg  lcon  temp
+q bn_res  1e-3  32  120  supcon_0.15         0.0   0.15  0.07
+q bn_res  1e-3  32  120  supcon_0.25         0.0   0.25  0.07
+q bn_res  1e-3  32  120  supcon_temp0.05     0.0   0.2   0.05
+
+echo ""
+echo "--- Batch 7: temperature + big batch ---"
+q bn_res  1e-3  32  120  supcon_temp0.10     0.0   0.2   0.10
+q bn_res  1e-3  64  120  supcon_bs64         0.0   0.2   0.07
 
 _flush_jobs
 
