@@ -345,6 +345,50 @@ def _make_norm2d_v2(num_features: int, task_idx: int, bn_up_to: int = 0) -> nn.M
 
 
 # ---------------------------------------------------------------------------
+# GRN2d  –  Global Response Normalization for 4-D (B, C, H, W) feature maps
+#
+# Adapted from ConvNeXt V2 (Woo et al., arXiv 2301.00808) to channels-first format.
+#
+# Original (channels-last, B H W C):
+#   Gx = ||x||_2  over spatial dims (H, W) → (B, 1, 1, C)
+#   Nx = Gx / mean(Gx over channels)       → rescaled gate
+#   y  = gamma * (x * Nx) + beta + x
+#
+# Here (channels-first, B C H W):
+#   Gx = ||x||_F  over spatial dims (H, W) → (B, C, 1, 1)  per-channel norm
+#   Nx = Gx / mean(Gx over channels C)     → (B, 1, 1, 1)  relative response
+#   y  = gamma * (x * Nx) + beta + x
+#
+# Zero-init of gamma and beta means GRN starts as a pure residual (+x),
+# so it is safe to drop in on top of frozen pretrained conv weights.
+# ---------------------------------------------------------------------------
+
+class GRN2d(nn.Module):
+    """Global Response Normalization for (B, C, H, W) feature maps."""
+
+    def __init__(self, num_features: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        # Zero-init → identity residual at the start of training
+        self.gamma = nn.Parameter(torch.zeros(1, num_features, 1, 1))
+        self.beta  = nn.Parameter(torch.zeros(1, num_features, 1, 1))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Per-channel Frobenius norm over spatial dims (H, W) → (B, C, 1, 1)
+        Gx = torch.sqrt(torch.sum(x ** 2, dim=(2, 3), keepdim=True) + self.eps)
+        # Normalize by mean channel response → (B, 1, 1, 1)
+        Nx = Gx / (Gx.mean(dim=1, keepdim=True) + self.eps)
+        return self.gamma * (x * Nx) + self.beta + x
+
+
+def _make_norm2d_v3(num_features: int, task_idx: int, bn_up_to: int = 0) -> nn.Module:
+    """Return BN for tasks <= bn_up_to, GRN2d for the rest."""
+    if task_idx <= bn_up_to:
+        return nn.BatchNorm2d(num_features)
+    return GRN2d(num_features)
+
+
+# ---------------------------------------------------------------------------
 # ConvBlockDTN2  –  ConvBlock using DynamicTanhNorm2_4d
 # ---------------------------------------------------------------------------
 
@@ -509,3 +553,143 @@ class MCnn14DTN2(nn.Module):
         (x1, _) = torch.max(x, dim=2)
         x2 = torch.mean(x, dim=2)
         return x1 + x2   # (B, 2048)
+
+
+# ---------------------------------------------------------------------------
+# ConvBlockGRN  –  ConvBlock using GRN2d for D2/D3, BN for D1
+# ---------------------------------------------------------------------------
+
+class ConvBlockGRN(nn.Module):
+    def __init__(self, in_channels, out_channels, nb_tasks, bn_up_to=0):
+        super().__init__()
+        self.conv1 = nn.Conv2d(in_channels=in_channels,
+                               out_channels=out_channels,
+                               kernel_size=(3, 3), stride=(1, 1),
+                               padding=(1, 1), bias=False)
+        self.conv2 = nn.Conv2d(in_channels=out_channels,
+                               out_channels=out_channels,
+                               kernel_size=(3, 3), stride=(1, 1),
+                               padding=(1, 1), bias=False)
+        self.bnF = nn.ModuleList([_make_norm2d_v3(out_channels, i, bn_up_to) for i in range(nb_tasks)])
+        self.bnS = nn.ModuleList([_make_norm2d_v3(out_channels, i, bn_up_to) for i in range(nb_tasks)])
+
+    def forward(self, input, pool_size=(2, 2), pool_type='avg', task=1):
+        x = F.relu_(self.bnF[task](self.conv1(input)))
+        x = F.relu_(self.bnS[task](self.conv2(x)))
+        if pool_type == 'max':
+            x = F.max_pool2d(x, kernel_size=pool_size)
+        elif pool_type == 'avg':
+            x = F.avg_pool2d(x, kernel_size=pool_size)
+        elif pool_type == 'avg+max':
+            x = F.avg_pool2d(x, kernel_size=pool_size) + F.max_pool2d(x, kernel_size=pool_size)
+        else:
+            raise Exception('Incorrect argument!')
+        return x
+
+
+# ---------------------------------------------------------------------------
+# MCnn14GRN  –  CNN14 backbone with GRN2d norms for D2/D3, BN for D1
+#
+# GRN2d properties:
+#   - Zero-init (gamma=0, beta=0) → starts as pure identity (+ x residual)
+#   - Safe to drop onto pretrained BN conv weights without corrupting D1
+#   - Learns per-channel global response normalisation from scratch per domain
+#   - No running statistics (batch-independent, like GN/LN)
+# ---------------------------------------------------------------------------
+
+class MCnn14GRN(nn.Module):
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1, bn_up_to=0):
+
+        super().__init__()
+
+        window   = 'hann'
+        center   = True
+        pad_mode = 'reflect'
+        ref      = 1.0
+        amin     = 1e-10
+        top_db   = None
+
+        self.spectrogram_extractor = Spectrogram(
+            n_fft=window_size, hop_length=hop_size,
+            win_length=window_size, window=window, center=center,
+            pad_mode=pad_mode, freeze_parameters=True)
+
+        self.logmel_extractor = LogmelFilterBank(
+            sr=sample_rate, n_fft=window_size,
+            n_mels=mel_bins, fmin=fmin, fmax=fmax,
+            ref=ref, amin=amin, top_db=top_db, freeze_parameters=True)
+
+        # D1 uses BN (from checkpoint), D2/D3 use GRN2d (zero-init residual)
+        self.bn0 = nn.ModuleList([_make_norm2d_v3(mel_bins, i, bn_up_to) for i in range(nb_tasks)])
+
+        self.conv_block1 = ConvBlockGRN(1,    64,   nb_tasks, bn_up_to)
+        self.conv_block2 = ConvBlockGRN(64,   128,  nb_tasks, bn_up_to)
+        self.conv_block3 = ConvBlockGRN(128,  256,  nb_tasks, bn_up_to)
+        self.conv_block4 = ConvBlockGRN(256,  512,  nb_tasks, bn_up_to)
+        self.conv_block5 = ConvBlockGRN(512,  1024, nb_tasks, bn_up_to)
+        self.conv_block6 = ConvBlockGRN(1024, 2048, nb_tasks, bn_up_to)
+
+        self.fc = nn.Linear(2048, classes_num)
+
+    def get_output_dim(self):
+        return self.fc.out_features
+
+    def change_output_dim(self, new_dim, second_iter=False):
+        in_features  = self.fc.in_features
+        out_features = self.fc.out_features
+        new_fc = nn.Linear(in_features, out_features + (new_dim - out_features))
+        new_fc.weight.data[:out_features] = self.fc.weight.data
+        new_fc.bias.data[:out_features]   = self.fc.bias.data
+        self.fc = new_fc
+        self.n_classes = new_dim
+
+    def freeze_weight(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def forward(self, input, task=1):
+        x = self.spectrogram_extractor(input)
+        x = self.logmel_extractor(x)
+        x = x.transpose(1, 3)
+        x = self.bn0[task](x)
+        x = x.transpose(1, 3)
+        x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block5(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block6(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = torch.mean(x, dim=3)
+        (x1, _) = torch.max(x, dim=2)
+        x2 = torch.mean(x, dim=2)
+        return self.fc(x1 + x2)
+
+    def get_embedding(self, input, task=1):
+        x = self.spectrogram_extractor(input)
+        x = self.logmel_extractor(x)
+        x = x.transpose(1, 3)
+        x = self.bn0[task](x)
+        x = x.transpose(1, 3)
+        x = self.conv_block1(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block2(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block3(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block4(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block5(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = self.conv_block6(x, pool_size=(2, 2), pool_type='avg', task=task)
+        x = F.dropout(x, p=0.2, training=self.training)
+        x = torch.mean(x, dim=3)
+        (x1, _) = torch.max(x, dim=2)
+        x2 = torch.mean(x, dim=2)
+        return x1 + x2

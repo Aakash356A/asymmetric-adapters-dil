@@ -15,7 +15,7 @@
 # Results are appended to experiment_results.txt after every run.
 # ================================================================
 
-BASE_DIR="/home/aakash/dcase_task7"
+BASE_DIR="/home/aakashd/dcase_task7"
 SCRIPT="$BASE_DIR/code/baseline/baseline_DIL_task7.py"
 D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
@@ -275,20 +275,21 @@ q() {
 #   C. Larger batch size   (bs=64 for more contrastive pairs per batch)
 # =====================================================================
 
-echo ""
-echo "--- Batch 6: SupCon fine-tuning on BN_RES ---"
-#        model   lr    bs   ep   tag               lreg  lcon  temp
-q bn_res  1e-3  32  120  supcon_0.15         0.0   0.15  0.07
-q bn_res  1e-3  32  120  supcon_0.25         0.0   0.25  0.07
-q bn_res  1e-3  32  120  supcon_temp0.05     0.0   0.2   0.05
+# echo ""
+# echo "--- Batch 6: SupCon fine-tuning on BN_RES ---"
+# #        model   lr    bs   ep   tag               lreg  lcon  temp
+# q bn_res  1e-3  32  120  supcon_0.15         0.0   0.15  0.07
+# q bn_res  1e-3  32  120  supcon_0.25         0.0   0.25  0.07
+# q bn_res  1e-3  32  120  supcon_temp0.05     0.0   0.2   0.05
 
-echo ""
-echo "--- Batch 7: temperature + big batch ---"
-q bn_res  1e-3  32  120  supcon_temp0.10     0.0   0.2   0.10
-q bn_res  1e-3  64  120  supcon_bs64         0.0   0.2   0.07
+# echo ""
+# echo "--- Batch 7: temperature + big batch ---"
+# q bn_res  1e-3  32  120  supcon_temp0.10     0.0   0.2   0.10
+# q bn_res  1e-3  64  120  supcon_bs64         0.0   0.2   0.07
 
-_flush_jobs
+# _flush_jobs
 
+run_experiment bn_grn  1e-3  32  120  grn_norm
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
 # run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4

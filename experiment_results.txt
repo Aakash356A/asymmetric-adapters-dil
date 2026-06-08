@@ -43,3 +43,4 @@
 2026-06-07 00:50:16 | BN_RES_lr1e-3_bs32_ep120_supcon_temp0.10      | D2=77.78% | D3=53.23% | Avg=65.505% | DONE
 2026-06-07 00:50:21 | BN_RES_lr1e-3_bs32_ep120_supcon_temp0.05      | D2=75.43% | D3=54.59% | Avg=65.01% | DONE
 2026-06-07 01:58:25 | BN_RES_lr1e-3_bs64_ep120_supcon_bs64          | D2=76.21% | D3=56.95% | Avg=66.58% | DONE
+2026-06-08 14:46:42 | BN_GRN_lr1e-3_bs32_ep120_grn_norm             | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)

@@ -19,7 +19,7 @@ from config_task7 import (sample_rate, mel_bins, fmin, fmax, window_size,
 import torch.optim as optim
 
 from domain_net import MCnn14
-from domain_net_dtn import MCnn14DTN, MCnn14Mixed, MCnn14DTN2
+from domain_net_dtn import MCnn14DTN, MCnn14Mixed, MCnn14DTN2, MCnn14GRN
 from domain_net_arch import (MCnn14CLF, MCnn14Cos, MCnn14FiLM,
                              MCnn14SE, MCnn14Att,
                              MCnn14SEDeep, MCnn14SEClf, MCnn14Res,
@@ -304,6 +304,7 @@ class Learner():
             'bn_gn_se':    MCnn14GNSE,
             'bn_res_adil': MCnn14ResAdil,
             'bn_res_clf':  MCnn14ResClf,
+            'bn_grn':      MCnn14GRN,
         }
         Model = _model_zoo.get(model_type, MCnn14)   # default / 'bn' -> baseline
         self.model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
@@ -546,7 +547,7 @@ def train(args):
         auto_name = '{}_lr{}_bs{}_ep{}'.format(
             args.model_type.upper(), args.learning_rate, args.batch_size, args.epoch)
         config.save_resume_path = os.path.join(
-            '/home/aakash/dcase_task7/checkpoints', auto_name)
+            '/home/aakashd/dcase_task7/checkpoints', auto_name)
 
     seen_domains = []
     model = Learner(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
@@ -586,7 +587,8 @@ if __name__ == '__main__':
                                        'bn_clf', 'bn_cos', 'bn_film', 'bn_se', 'bn_att',
                                        'bn_se_deep', 'bn_se_clf', 'bn_res',
                                        'bn_gn', 'bn_gn_se',
-                                       'bn_res_adil', 'bn_res_clf'],
+                                       'bn_res_adil', 'bn_res_clf',
+                                       'bn_grn'],
                               default='dtn',
                               help='bn=BatchNorm baseline; dtn=DTN for D2+D3; dtn2=LayerNorm+tanh gate; mixed=BN D2/DTN D3; '
                                    'bn_clf=per-domain linear head; bn_cos=per-domain cosine head; '
@@ -597,7 +599,8 @@ if __name__ == '__main__':
                                    'bn_gn=GroupNorm baseline (no running stats); '
                                    'bn_gn_se=GroupNorm + SE adapters; '
                                    'bn_res_adil=Res adapters + ADIL residual head; '
-                                   'bn_res_clf=Res adapters + per-domain head')
+                                   'bn_res_clf=Res adapters + per-domain head; '
+                                   'bn_grn=GRN (Global Response Norm) for D2/D3, BN for D1')
     parser_train.add_argument('--lambda_con', type=float, default=0.0,
                               help='Weight for supervised contrastive loss (0=off). Try 0.1 or 0.3.')
     parser_train.add_argument('--con_temp', type=float, default=0.07,
