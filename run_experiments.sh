@@ -15,13 +15,13 @@
 # Results are appended to experiment_results.txt after every run.
 # ================================================================
 
-BASE_DIR="/home/aakash/dcase_task7"
+BASE_DIR="/home/aakashd/dcase_task7"
 SCRIPT="$BASE_DIR/code/baseline/baseline_DIL_task7.py"
 D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
 
 # ── Parallel settings ────────────────────────────────────────────────────
-MAX_PARALLEL=2   # jobs to run at once  (12 GB GPU ÷ 3 ≈ 4 GB each)
+MAX_PARALLEL=3   # jobs to run at once  (12 GB GPU ÷ 3 ≈ 4 GB each)
                  # → set to 2 if you see CUDA OOM errors
 
 SER_WORKERS=16   # dataloader workers for serial runs
@@ -323,12 +323,12 @@ q() {
 #
 # q args:  model  lr  bs  ep  tag  lreg lcon temp  depths  aug bal
 # =====================================================================
-echo ""
-echo "--- Batch 8: per-domain adapter depth (bn_res_deep) ---"
-q bn_res_deep  1e-3  32  120  sym_deep2      0.0  0.2  0.07  "2,2"  0  0
-q bn_res_deep  1e-3  32  120  asym_d3        0.0  0.2  0.07  "1,2"  0  0
-q bn_res_deep  1e-3  32  120  asym_d3_heavy  0.0  0.2  0.07  "1,3"  0  0
-_flush_jobs
+# echo ""
+# echo "--- Batch 8: per-domain adapter depth (bn_res_deep) ---"
+# q bn_res_deep  1e-3  32  120  sym_deep2      0.0  0.2  0.07  "2,2"  0  0
+# q bn_res_deep  1e-3  32  120  asym_d3        0.0  0.2  0.07  "1,2"  0  0
+# q bn_res_deep  1e-3  32  120  asym_d3_heavy  0.0  0.2  0.07  "1,3"  0  0
+# _flush_jobs
 
 # =====================================================================
 # BATCH 9 — Data augmentation + class balance on the best recipe
@@ -338,12 +338,12 @@ _flush_jobs
 #
 # q args:  model  lr  bs  ep  tag  lreg lcon temp  depths  aug bal
 # =====================================================================
-echo ""
-echo "--- Batch 9: augmentation / class balance on BN_RES ---"
-q bn_res  1e-3  32  120  aug            0.0  0.2  0.07  ""  1  0
-q bn_res  1e-3  32  120  aug_balanced   0.0  0.2  0.07  ""  1  1
-q bn_res  1e-3  32  120  balanced       0.0  0.2  0.07  ""  0  1
-_flush_jobs
+# echo ""
+# echo "--- Batch 9: augmentation / class balance on BN_RES ---"
+# q bn_res  1e-3  32  120  aug            0.0  0.2  0.07  ""  1  0
+# q bn_res  1e-3  32  120  aug_balanced   0.0  0.2  0.07  ""  1  1
+# q bn_res  1e-3  32  120  balanced       0.0  0.2  0.07  ""  0  1
+# _flush_jobs
 
 # =====================================================================
 # ANGAD ROUTER — D1-BN embedding + sigmoid rejection router
@@ -355,25 +355,25 @@ _flush_jobs
 # Pick BEST_RUN = the bn_res + SupCon 0.2 run dir (its checkpoint_D3.pth
 # holds the trained D2/D3 params).
 # ---------------------------------------------------------------------
-ROUTER_DIR="$BASE_DIR/checkpoints/router"
-BEST_RUN="$BASE_DIR/checkpoints/BN_RES_lr1e-3_bs32_ep120_supcon_0.2"
-mkdir -p "$ROUTER_DIR"
-#
-python3 "$BASE_DIR/code/baseline/domain_router.py" train \
-    --model_type bn_res --learning_rate 1e-3 --batch_size 32 \
-    --epoch 30 --num_workers "$SER_WORKERS" --cuda \
-    --d1_checkpoint "$D1_CKPT" \
-    --router_out "$ROUTER_DIR/router.pth"
-#
-python3 "$BASE_DIR/code/baseline/domain_router.py" eval \
-    --model_type bn_res --num_workers "$SER_WORKERS" --cuda \
-    --model_checkpoint "$BEST_RUN/checkpoint_D3.pth" \
-    --router_in "$ROUTER_DIR/router.pth" --threshold 0.5
+# ROUTER_DIR="$BASE_DIR/checkpoints/router"
+# BEST_RUN="$BASE_DIR/checkpoints/BN_RES_lr1e-3_bs32_ep120_supcon_0.2"
+# mkdir -p "$ROUTER_DIR"
+# #
+# python3 "$BASE_DIR/code/baseline/domain_router.py" train \
+#     --model_type bn_res --learning_rate 1e-3 --batch_size 32 \
+#     --epoch 30 --num_workers "$SER_WORKERS" --cuda \
+#     --d1_checkpoint "$D1_CKPT" \
+#     --router_out "$ROUTER_DIR/router.pth"
+# #
+# python3 "$BASE_DIR/code/baseline/domain_router.py" eval \
+#     --model_type bn_res --num_workers "$SER_WORKERS" --cuda \
+#     --model_checkpoint "$BEST_RUN/checkpoint_D3.pth" \
+#     --router_in "$ROUTER_DIR/router.pth" --threshold 0.5
 
-# --- extra sweeps to try once you see which idea wins -------------------
-run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
-run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
-run_experiment bn_film  1e-4    32    150      film_adapters_ep150
+# # --- extra sweeps to try once you see which idea wins -------------------
+# run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
+# run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
+# run_experiment bn_film  1e-4    32    150      film_adapters_ep150
 
 # =====================================================================
 # BATCH 10 — bn_res_deep_clf: deep adapters + per-domain head + supcon
@@ -406,11 +406,11 @@ _flush_jobs
 #
 # q args:  model              lr    bs  ep   tag                   lreg  lcon  temp  depths  aug bal
 # =====================================================================
-echo ""
-echo "--- Batch 11: longer training (180 ep) ---"
-q bn_res_clf       1e-3  32  180  clf_sup02_ep180          0.0   0.2  0.07  ""     0  0
-q bn_res_deep_clf  1e-3  32  180  deep_clf_d3_ep180        0.0   0.2  0.07  "1,3"  0  0
-_flush_jobs
+# echo ""
+# echo "--- Batch 11: longer training (180 ep) ---"
+# q bn_res_clf       1e-3  32  180  clf_sup02_ep180          0.0   0.2  0.07  ""     0  0
+# q bn_res_deep_clf  1e-3  32  180  deep_clf_d3_ep180        0.0   0.2  0.07  "1,3"  0  0
+# _flush_jobs
 
 # =====================================================================
 # BATCH 12 — TTA evaluation on best existing checkpoints
@@ -421,25 +421,25 @@ _flush_jobs
 # =====================================================================
 # BEST_RES_CLF="$BASE_DIR/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2"
 # BEST_RES_DEEP="$BASE_DIR/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy"
-#
+
 # echo ""
 # echo "--- Batch 12: TTA (tta_n=8) on top checkpoints ---"
 # python3 "$SCRIPT" train \
 #     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
 #     --model_type=bn_res_clf --checkpoint_dir="$BEST_RES_CLF" \
 #     --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
-#
+
 # python3 "$SCRIPT" train \
 #     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
 #     --model_type=bn_res_deep --checkpoint_dir="$BEST_RES_DEEP" \
 #     --adapter_depths=1,3 --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
 
-# =====================================================================
-# BATCH 13 — Ensemble of best D2 and D3 checkpoints
-#
-# Uncomment once BEST_RES_CLF and BEST_RES_DEEP are available.
-# Averages the two models' softmax predictions per domain.
-# =====================================================================
+# # =====================================================================
+# # BATCH 13 — Ensemble of best D2 and D3 checkpoints
+# #
+# # Uncomment once BEST_RES_CLF and BEST_RES_DEEP are available.
+# # Averages the two models' softmax predictions per domain.
+# # =====================================================================
 # echo ""
 # echo "--- Batch 13: ensemble eval ---"
 # python3 "$SCRIPT" ensemble_eval \
