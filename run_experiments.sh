@@ -15,7 +15,7 @@
 # Results are appended to experiment_results.txt after every run.
 # ================================================================
 
-BASE_DIR="/home/aakashd/dcase_task7"
+BASE_DIR="/home/aakash/dcase_task7"
 SCRIPT="$BASE_DIR/code/baseline/baseline_DIL_task7.py"
 D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
@@ -355,24 +355,24 @@ _flush_jobs
 # Pick BEST_RUN = the bn_res + SupCon 0.2 run dir (its checkpoint_D3.pth
 # holds the trained D2/D3 params).
 # ---------------------------------------------------------------------
-# ROUTER_DIR="$BASE_DIR/checkpoints/router"
-# BEST_RUN="$BASE_DIR/checkpoints/BN_RES_lr1e-3_bs32_ep120_supcon_0.2"
-# mkdir -p "$ROUTER_DIR"
+ROUTER_DIR="$BASE_DIR/checkpoints/router"
+BEST_RUN="$BASE_DIR/checkpoints/BN_RES_lr1e-3_bs32_ep120_supcon_0.2"
+mkdir -p "$ROUTER_DIR"
 #
-# python3 "$BASE_DIR/code/baseline/domain_router.py" train \
-#     --model_type bn_res --learning_rate 1e-3 --batch_size 32 \
-#     --epoch 30 --num_workers "$SER_WORKERS" --cuda \
-#     --d1_checkpoint "$D1_CKPT" \
-#     --router_out "$ROUTER_DIR/router.pth"
+python3 "$BASE_DIR/code/baseline/domain_router.py" train \
+    --model_type bn_res --learning_rate 1e-3 --batch_size 32 \
+    --epoch 30 --num_workers "$SER_WORKERS" --cuda \
+    --d1_checkpoint "$D1_CKPT" \
+    --router_out "$ROUTER_DIR/router.pth"
 #
-# python3 "$BASE_DIR/code/baseline/domain_router.py" eval \
-#     --model_type bn_res --num_workers "$SER_WORKERS" --cuda \
-#     --model_checkpoint "$BEST_RUN/checkpoint_D3.pth" \
-#     --router_in "$ROUTER_DIR/router.pth" --threshold 0.5
+python3 "$BASE_DIR/code/baseline/domain_router.py" eval \
+    --model_type bn_res --num_workers "$SER_WORKERS" --cuda \
+    --model_checkpoint "$BEST_RUN/checkpoint_D3.pth" \
+    --router_in "$ROUTER_DIR/router.pth" --threshold 0.5
 
 # --- extra sweeps to try once you see which idea wins -------------------
-# run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
-# run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
-# run_experiment bn_film  1e-4    32    150      film_adapters_ep150
+run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
+run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
+run_experiment bn_film  1e-4    32    150      film_adapters_ep150
 
 
