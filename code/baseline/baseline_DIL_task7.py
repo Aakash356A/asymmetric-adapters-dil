@@ -24,9 +24,12 @@ from domain_net_arch import (MCnn14CLF, MCnn14Cos, MCnn14FiLM,
                              MCnn14SE, MCnn14Att,
                              MCnn14SEDeep, MCnn14SEClf, MCnn14Res,
                              MCnn14GN, MCnn14GNSE,
-                             MCnn14ResAdil, MCnn14ResClf)
+                             MCnn14ResAdil, MCnn14ResClf,
+                             MCnn14ResDeep, set_adapter_depths)
 
 from datasetfactory_task7 import DILDatasetInc as DILDataset
+from datasetfactory_task7_augment import DILDatasetInc as DILDatasetAug
+from torch.utils.data import WeightedRandomSampler
 from sklearn import metrics
 from tqdm import tqdm
 from utilities import *
@@ -304,6 +307,7 @@ class Learner():
             'bn_gn_se':    MCnn14GNSE,
             'bn_res_adil': MCnn14ResAdil,
             'bn_res_clf':  MCnn14ResClf,
+            'bn_res_deep': MCnn14ResDeep,
             'bn_grn':      MCnn14GRN,
         }
         Model = _model_zoo.get(model_type, MCnn14)   # default / 'bn' -> baseline
@@ -467,13 +471,38 @@ class Learner():
 
         print("Starting DIL Task D{}".format(self.cur_task + 1))
 
-        dataset_train = DILDataset(train_df, config.audio_folder_DIL, training=True)
+        use_augment = getattr(args, 'augment', False)
+        balance = getattr(args, 'class_balance', False)
+
+        if use_augment:
+            # Waveform-level augmentation (AudioAugmenter) on the training set.
+            dataset_train = DILDatasetAug(train_df, config.audio_folder_DIL,
+                                          training=True, augment=True)
+            print('  [data] waveform augmentation ENABLED for training')
+        else:
+            dataset_train = DILDataset(train_df, config.audio_folder_DIL, training=True)
         dataset_val = DILDataset(valid_df, config.audio_folder_DIL, training=False)
         #dataset_test = DILDataset(test_df, config.audio_folder_DIL)
 
-        # Data loader
-        train_loader = torch.utils.data.DataLoader(dataset=dataset_train, batch_size=batch_size, shuffle=True,
-                                                   num_workers=num_workers, pin_memory=(device == 'cuda'))
+        # Data loader — optionally use a class-balanced sampler so every class
+        # is drawn with equal probability (mutually exclusive with shuffle).
+        if balance and hasattr(dataset_train, 'targets'):
+            targets = np.asarray(dataset_train.targets)
+            class_counts = np.bincount(targets, minlength=config.classes_num_DIL)
+            class_counts = np.clip(class_counts, 1, None)
+            sample_weights = 1.0 / class_counts[targets]
+            sampler = WeightedRandomSampler(
+                weights=torch.as_tensor(sample_weights, dtype=torch.double),
+                num_samples=len(sample_weights), replacement=True)
+            print('  [data] class-balanced sampler ENABLED  '
+                  f'(class counts: {class_counts.tolist()})')
+            train_loader = torch.utils.data.DataLoader(
+                dataset=dataset_train, batch_size=batch_size, sampler=sampler,
+                num_workers=num_workers, pin_memory=(device == 'cuda'))
+        else:
+            train_loader = torch.utils.data.DataLoader(
+                dataset=dataset_train, batch_size=batch_size, shuffle=True,
+                num_workers=num_workers, pin_memory=(device == 'cuda'))
 
         validate_loader = torch.utils.data.DataLoader(dataset=dataset_val, batch_size=1, shuffle=False,
                                                       num_workers=num_workers, pin_memory=(device == 'cuda'))
@@ -549,6 +578,13 @@ def train(args):
         config.save_resume_path = os.path.join(
             '/home/aakashd/dcase_task7/checkpoints', auto_name)
 
+    # Per-task adapter depths for bn_res_deep (e.g. "1,3" -> D2=1, D3=3).
+    if getattr(args, 'adapter_depths', None):
+        depth_list = [int(d) for d in args.adapter_depths.split(',') if d.strip() != '']
+        # depth_list maps to tasks 1..N (D2, D3, ...); task 0 (D1) stays identity.
+        depths = {t + 1: depth_list[t] for t in range(len(depth_list))}
+        set_adapter_depths(depths)
+
     seen_domains = []
     model = Learner(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
                     classes_num, num_tasks, model_type=args.model_type)
@@ -587,7 +623,7 @@ if __name__ == '__main__':
                                        'bn_clf', 'bn_cos', 'bn_film', 'bn_se', 'bn_att',
                                        'bn_se_deep', 'bn_se_clf', 'bn_res',
                                        'bn_gn', 'bn_gn_se',
-                                       'bn_res_adil', 'bn_res_clf',
+                                       'bn_res_adil', 'bn_res_clf', 'bn_res_deep',
                                        'bn_grn'],
                               default='dtn',
                               help='bn=BatchNorm baseline; dtn=DTN for D2+D3; dtn2=LayerNorm+tanh gate; mixed=BN D2/DTN D3; '
@@ -612,6 +648,15 @@ if __name__ == '__main__':
                                    '(0 = disabled). Try 0.5 or 1.0.')
     parser_train.add_argument('--n_perturb', type=int, default=4,
                               help='Number of TF-masked probes per sample for BAR')
+    parser_train.add_argument('--adapter_depths', type=str, default=None,
+                              help='Per-task ResBottleneck adapter depth for '
+                                   'bn_res_deep, comma-separated for D2,D3,... '
+                                   'e.g. "1,3" gives D2=1 adapter/block, D3=3. '
+                                   'D1 is always identity.')
+    parser_train.add_argument('--augment', action='store_true', default=False,
+                              help='Enable waveform-level AudioAugmenter on training data')
+    parser_train.add_argument('--class_balance', action='store_true', default=False,
+                              help='Use a class-balanced WeightedRandomSampler for training')
     # Parse arguments
     args = parser.parse_args()
     args.filename = get_filename(__file__)

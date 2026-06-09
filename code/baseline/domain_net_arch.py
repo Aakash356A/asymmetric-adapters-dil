@@ -32,6 +32,24 @@ _BLOCK_CHANNELS = (64, 128, 256, 512, 1024, 2048)
 
 
 # ---------------------------------------------------------------------------
+# Per-task adapter-depth configuration (used by MCnn14ResDeep / bn_res_deep)
+#
+# Maps task index -> number of stacked ResBottleneck adapters after each block.
+# Task 0 (D1) is ALWAYS identity regardless of this map.
+# Example: {1: 1, 2: 3}  ->  D2 gets 1 adapter/block, D3 gets 3 adapters/block.
+# Set from the training script (--adapter_depths) before the model is built.
+# ---------------------------------------------------------------------------
+_ADAPTER_DEPTHS = {}
+
+
+def set_adapter_depths(depths):
+    """depths: dict {task_idx: depth}. Call before instantiating MCnn14ResDeep."""
+    global _ADAPTER_DEPTHS
+    _ADAPTER_DEPTHS = dict(depths)
+    print(f'  [bn_res_deep] per-task adapter depths = {_ADAPTER_DEPTHS}')
+
+
+# ---------------------------------------------------------------------------
 # Common base: per-domain trainability + checkpoint warm-start hooks
 # ---------------------------------------------------------------------------
 
@@ -359,7 +377,7 @@ class ResBottleneck(nn.Module):
         # Zero-init so adapter starts as identity residual
         nn.init.zeros_(self.up.weight)
         nn.init.zeros_(self.up.bias)
-
+    
     def forward(self, x):
         return x + self.up(F.relu(self.down(x)))
 
@@ -368,6 +386,63 @@ class MCnn14Res(_AdapterNet):
     """Residual bottleneck conv adapters after each conv block."""
     def _make_adapter(self, channels):
         return ResBottleneck(channels)
+
+
+# ---------------------------------------------------------------------------
+# Idea C+ -- DEEPER / ASYMMETRIC residual adapters  (bn_res_deep)
+#
+# Same ResBottleneck adapters as bn_res, but the NUMBER stacked after each
+# conv block is configurable PER DOMAIN via set_adapter_depths().  This lets
+# the weaker domain (D3) get more per-domain conv capacity than D2 without
+# touching the shared frozen backbone and without any risk to D2 (the two
+# domains' adapter stacks are completely independent).
+#
+# Every ResBottleneck is zero-init, so a stack of any depth still starts as
+# an exact identity -- safe for the pretrained features.
+# ---------------------------------------------------------------------------
+
+class ResAdapterStack(nn.Module):
+    """A stack of `depth` ResBottleneck adapters (identity at init)."""
+
+    def __init__(self, channels, depth=1, bottleneck_ratio=4):
+        super().__init__()
+        self.blocks = nn.ModuleList(
+            [ResBottleneck(channels, bottleneck_ratio) for _ in range(max(1, depth))])
+
+    def forward(self, x):
+        for blk in self.blocks:
+            x = blk(x)
+        return x
+
+
+class MCnn14ResDeep(_AdapterNet):
+    """
+    Residual bottleneck adapters with PER-DOMAIN depth.
+
+    Depth per task is read from the module-level _ADAPTER_DEPTHS map (set via
+    set_adapter_depths()).  Task 0 (D1) is always identity.  If a task is not
+    in the map it defaults to depth 1 (i.e. identical to bn_res).
+    """
+
+    def _make_adapter(self, channels):
+        # Fallback used only if __init__ doesn't rebuild (depth 1).
+        return ResBottleneck(channels)
+
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1):
+        super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
+                         fmax, classes_num, nb_tasks)
+        # Rebuild the per-domain adapter stacks honouring per-task depth.
+        adapters = []
+        for t in range(nb_tasks):
+            if t == 0:
+                adapters.append(nn.ModuleList(
+                    [nn.Identity() for _ in _BLOCK_CHANNELS]))
+            else:
+                depth = _ADAPTER_DEPTHS.get(t, 1)
+                adapters.append(nn.ModuleList(
+                    [ResAdapterStack(c, depth) for c in _BLOCK_CHANNELS]))
+        self.adapters = nn.ModuleList(adapters)
 
 
 # ---------------------------------------------------------------------------

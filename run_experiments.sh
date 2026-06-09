@@ -48,7 +48,16 @@ run_experiment() {
     local lambda_reg="${6:-0.0}"
     local lambda_con="${7:-0.0}"
     local con_temp="${8:-0.07}"
+    local adapter_depths="${9:-}"        # e.g. "1,3" for bn_res_deep (D2,D3)
+    local augment="${10:-0}"             # 1 = enable waveform augmentation
+    local class_balance="${11:-0}"       # 1 = class-balanced sampler
     local workers="${_PAR_WORKERS:-$SER_WORKERS}"
+
+    # Optional flags appended only when set
+    local extra_flags=""
+    [ -n "$adapter_depths" ]   && extra_flags="$extra_flags --adapter_depths=$adapter_depths"
+    [ "$augment" = "1" ]       && extra_flags="$extra_flags --augment"
+    [ "$class_balance" = "1" ] && extra_flags="$extra_flags --class_balance"
 
     # Human-readable experiment name
     local name="${model_type^^}_lr${lr}_bs${bs}_ep${ep}"
@@ -85,6 +94,7 @@ run_experiment() {
             --lambda_reg="$lambda_reg" \
             --lambda_con="$lambda_con" \
             --con_temp="$con_temp" \
+            $extra_flags \
             --save > "$log_file" 2>&1
         local py_exit=$?
     else
@@ -101,6 +111,7 @@ run_experiment() {
             --lambda_reg="$lambda_reg" \
             --lambda_con="$lambda_con" \
             --con_temp="$con_temp" \
+            $extra_flags \
             --save 2>&1 | tee "$log_file"
         local py_exit=${PIPESTATUS[0]}
     fi
@@ -153,7 +164,14 @@ q() {
     local name="${1^^}_lr${2}_bs${3}_ep${4}${5:+_$5}"
     local lcon="${7:-0.0}"
     local temp="${8:-0.07}"
-    echo "  [+] queued: $name  λ_con=$lcon  τ=$temp"
+    local depths="${9:-}"
+    local aug="${10:-0}"
+    local bal="${11:-0}"
+    local note=""
+    [ -n "$depths" ] && note="$note  depths=$depths"
+    [ "$aug" = "1" ] && note="$note  +augment"
+    [ "$bal" = "1" ] && note="$note  +balance"
+    echo "  [+] queued: $name  λ_con=$lcon  τ=$temp$note"
     _PARALLEL=1 _PAR_WORKERS=$PAR_WORKERS run_experiment "$@" &
     _job_pids+=($!)
     if (( ${#_job_pids[@]} >= MAX_PARALLEL )); then
@@ -289,7 +307,69 @@ q() {
 
 # _flush_jobs
 
-run_experiment bn_grn  1e-3  32  120  grn_norm
+# run_experiment bn_grn  1e-3  32  120  grn_norm
+
+# =====================================================================
+# BATCH 8 — Per-domain adapter DEPTH  (bn_res_deep)  + SupCon λ=0.2
+#
+# Tests "does D3 want more conv capacity than D2?".  Adapters are
+# per-domain & zero-init, so D2 is never affected and identity-init is safe.
+# Recipe = current best (lr=1e-3, bs=32, SupCon λ=0.2, τ=0.07).
+#
+#   depths "D2,D3":
+#     sym_deep2      2,2  -> both domains 2 adapters/block (capacity baseline)
+#     asym_d3        1,2  -> D3 gets +1 adapter/block      (THE key run)
+#     asym_d3_heavy  1,3  -> D3 gets +2 adapters/block
+#
+# q args:  model  lr  bs  ep  tag  lreg lcon temp  depths  aug bal
+# =====================================================================
+echo ""
+echo "--- Batch 8: per-domain adapter depth (bn_res_deep) ---"
+q bn_res_deep  1e-3  32  120  sym_deep2      0.0  0.2  0.07  "2,2"  0  0
+q bn_res_deep  1e-3  32  120  asym_d3        0.0  0.2  0.07  "1,2"  0  0
+q bn_res_deep  1e-3  32  120  asym_d3_heavy  0.0  0.2  0.07  "1,3"  0  0
+_flush_jobs
+
+# =====================================================================
+# BATCH 9 — Data augmentation + class balance on the best recipe
+#
+# Uses AudioAugmenter (waveform-level) and/or a class-balanced sampler
+# on bn_res + SupCon λ=0.2.  Isolates the effect of DATA, not architecture.
+#
+# q args:  model  lr  bs  ep  tag  lreg lcon temp  depths  aug bal
+# =====================================================================
+echo ""
+echo "--- Batch 9: augmentation / class balance on BN_RES ---"
+q bn_res  1e-3  32  120  aug            0.0  0.2  0.07  ""  1  0
+q bn_res  1e-3  32  120  aug_balanced   0.0  0.2  0.07  ""  1  1
+q bn_res  1e-3  32  120  balanced       0.0  0.2  0.07  ""  0  1
+_flush_jobs
+
+# =====================================================================
+# ANGAD ROUTER — D1-BN embedding + sigmoid rejection router
+#
+# Separate from run_experiment (own script).  Step 1 trains the router
+# (only needs the D1 checkpoint).  Step 2 evaluates routed classification
+# using the FINAL checkpoint of the best trained model.
+#
+# Pick BEST_RUN = the bn_res + SupCon 0.2 run dir (its checkpoint_D3.pth
+# holds the trained D2/D3 params).
+# ---------------------------------------------------------------------
+# ROUTER_DIR="$BASE_DIR/checkpoints/router"
+# BEST_RUN="$BASE_DIR/checkpoints/BN_RES_lr1e-3_bs32_ep120_supcon_0.2"
+# mkdir -p "$ROUTER_DIR"
+#
+# python3 "$BASE_DIR/code/baseline/domain_router.py" train \
+#     --model_type bn_res --learning_rate 1e-3 --batch_size 32 \
+#     --epoch 30 --num_workers "$SER_WORKERS" --cuda \
+#     --d1_checkpoint "$D1_CKPT" \
+#     --router_out "$ROUTER_DIR/router.pth"
+#
+# python3 "$BASE_DIR/code/baseline/domain_router.py" eval \
+#     --model_type bn_res --num_workers "$SER_WORKERS" --cuda \
+#     --model_checkpoint "$BEST_RUN/checkpoint_D3.pth" \
+#     --router_in "$ROUTER_DIR/router.pth" --threshold 0.5
+
 # --- extra sweeps to try once you see which idea wins -------------------
 # run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
 # run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
