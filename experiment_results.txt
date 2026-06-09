@@ -51,3 +51,5 @@
 2026-06-09 06:24:50 | BN_RES_lr1e-3_bs32_ep120_aug                  | D2=76.21% | D3=51.99% | Avg=64.1%  | DONE
 2026-06-09 07:33:32 | BN_RES_lr1e-3_bs32_ep120_balanced             | D2=74.33% | D3=54.71% | Avg=64.52% | DONE
 2026-06-09 08:12:05 | BN_CLF_lr5e-4_bs32_ep120_perdomain_head_lr5e4 | D2=60.09% | D3=36.35% | Avg=48.22% | DONE
+2026-06-09 08:46:31 | BN_COS_lr5e-4_bs32_ep120_perdomain_cosine_lr5e4 | D2=59.94% | D3=36.23% | Avg=48.084999999999994% | DONE
+2026-06-09 09:02:23 | BN_FILM_lr1e-4_bs32_ep150_film_adapters_ep150 | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=120)
