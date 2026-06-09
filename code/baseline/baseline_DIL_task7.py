@@ -25,7 +25,8 @@ from domain_net_arch import (MCnn14CLF, MCnn14Cos, MCnn14FiLM,
                              MCnn14SEDeep, MCnn14SEClf, MCnn14Res,
                              MCnn14GN, MCnn14GNSE,
                              MCnn14ResAdil, MCnn14ResClf,
-                             MCnn14ResDeep, set_adapter_depths)
+                             MCnn14ResDeep, MCnn14ResDeepClf,
+                             set_adapter_depths)
 
 from datasetfactory_task7 import DILDatasetInc as DILDataset
 from datasetfactory_task7_augment import DILDatasetInc as DILDatasetAug
@@ -197,7 +198,20 @@ class SupConLoss:
         return loss[valid].mean()
 
 
-def _compute_accuracy(model, loader, task, device):
+def _tta_predict(model, audio, task, tta_n=1):
+    """Average softmax over TTA augmentations (temporal circular shifts)."""
+    if tta_n <= 1:
+        return torch.softmax(model(audio, task), dim=1)
+    T = audio.shape[-1]
+    step = max(1, T // (tta_n * 4))
+    probs = torch.softmax(model(audio, task), dim=1)
+    for i in range(1, tta_n):
+        shifted = torch.roll(audio, step * i, dims=-1)
+        probs = probs + torch.softmax(model(shifted, task), dim=1)
+    return probs / tta_n
+
+
+def _compute_accuracy(model, loader, task, device, tta_n=1):
 
     correct, total = 0, 0
     model.eval()
@@ -208,8 +222,7 @@ def _compute_accuracy(model, loader, task, device):
         inputs = inputs.float()
         inputs = inputs.to(device)
         with torch.no_grad():
-            outputs = model(inputs, task)
-        outputs = torch.softmax(outputs, dim=1)
+            outputs = _tta_predict(model, inputs, task, tta_n)
         predicts = torch.max(outputs, dim=1)[1]
         target_labels = targets
         targets = torch.argmax(targets, dim=-1)
@@ -228,7 +241,7 @@ def _compute_accuracy(model, loader, task, device):
     return np.around(tensor2numpy(correct) * 100 / total, decimals=2)
 
 
-def _compute_uncertainity(model, loader, seen_domains, device):
+def _compute_uncertainity(model, loader, seen_domains, device, tta_n=1):
     model.eval()
     nb_tasks = len(seen_domains) + 1  # +1 is D1
     correct, total = 0, 0
@@ -244,8 +257,8 @@ def _compute_uncertainity(model, loader, seen_domains, device):
         all_task_outputs = []
         for task in range(nb_tasks):
             with torch.no_grad():
-                out = model(inputs, task)
-            all_task_outputs.append(torch.softmax(out, dim=1).detach())
+                out = _tta_predict(model, inputs, task, tta_n)
+            all_task_outputs.append(out.detach())
 
         # Stack → (nb_tasks, batch_size, classes_num)
         outputs_stacked = torch.stack(all_task_outputs, dim=0)
@@ -305,10 +318,11 @@ class Learner():
             'bn_res':     MCnn14Res,
             'bn_gn':       MCnn14GN,
             'bn_gn_se':    MCnn14GNSE,
-            'bn_res_adil': MCnn14ResAdil,
-            'bn_res_clf':  MCnn14ResClf,
-            'bn_res_deep': MCnn14ResDeep,
-            'bn_grn':      MCnn14GRN,
+            'bn_res_adil':      MCnn14ResAdil,
+            'bn_res_clf':       MCnn14ResClf,
+            'bn_res_deep':      MCnn14ResDeep,
+            'bn_res_deep_clf':  MCnn14ResDeepClf,
+            'bn_grn':           MCnn14GRN,
         }
         Model = _model_zoo.get(model_type, MCnn14)   # default / 'bn' -> baseline
         self.model = Model(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
@@ -516,7 +530,7 @@ class Learner():
 
         #self.acc_prev(seen_domains, config.df_DIL_dev, config.df_DIL_eval, batch_size, num_workers, device)
 
-    def acc_prev(self, seen_domains, df_dev_train, df_dev_test, batch_size, num_workers, device):
+    def acc_prev(self, seen_domains, df_dev_train, df_dev_test, batch_size, num_workers, device, tta_n=1):
         self.model.to(device)
         self.model.eval()
         num_domains = len(seen_domains)
@@ -531,7 +545,7 @@ class Learner():
                                                           num_workers=num_workers, pin_memory=True)
 
             #prev_accuracy = _compute_accuracy(self.model, validate_loader, domain, device)
-            accuracy = _compute_uncertainity(self.model, validate_loader, seen_domains, device)
+            accuracy = _compute_uncertainity(self.model, validate_loader, seen_domains, device, tta_n=tta_n)
 
             print('seen domain: {} and its accuracy: {}'.format(seen_domains[domain], accuracy))
 
@@ -539,6 +553,103 @@ class Learner():
 
         average_accuracy = np.mean(accuracy_previous).item()
         return average_accuracy
+
+def eval_ensemble(args):
+    """
+    Ensemble evaluation: load multiple trained models, average their softmax
+    predictions per domain, then report per-domain and average accuracy.
+
+    Expects each checkpoint dir to contain checkpoint_D3.pth (the final model
+    state after sequential D2→D3 training, which holds all domain parameters).
+
+    Usage:
+        python baseline_DIL_task7.py ensemble_eval \
+            --model_types bn_res_clf,bn_res_deep_clf \
+            --ckpt_dirs /path/to/run1,/path/to/run2 \
+            [--adapter_depths 1,3]  # if any model needs it \
+            [--tta_n 4] [--cuda] [--num_workers 4]
+    """
+    ckpt_dirs   = [d.strip() for d in args.ckpt_dirs.split(',')]
+    model_types = [m.strip() for m in args.model_types.split(',')]
+    if len(model_types) == 1:
+        model_types = model_types * len(ckpt_dirs)
+    assert len(model_types) == len(ckpt_dirs), \
+        "--model_types and --ckpt_dirs must have the same number of entries"
+
+    device      = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
+    tta_n       = getattr(args, 'tta_n', 1)
+    num_workers = args.num_workers
+    classes_num = config.classes_num_DIL
+    num_tasks   = 3  # D1, D2, D3
+
+    # Build + load each model from its final (D3) checkpoint
+    loaded_models = []
+    for ckpt_dir, model_type in zip(ckpt_dirs, model_types):
+        if model_type in ('bn_res_deep', 'bn_res_deep_clf') and getattr(args, 'adapter_depths', None):
+            depth_list = [int(d) for d in args.adapter_depths.split(',')]
+            set_adapter_depths({t + 1: depth_list[t] for t in range(len(depth_list))})
+
+        learner = Learner(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
+                          classes_num, num_tasks, model_type=model_type)
+        ckpt_path = os.path.join(ckpt_dir, 'checkpoint_D3.pth')
+        incompatible = learner.model.load_state_dict(
+            torch.load(ckpt_path, map_location=device), strict=False)
+        if incompatible.missing_keys:
+            print(f'  [{model_type}] missing keys: {len(incompatible.missing_keys)}')
+        learner.model.to(device)
+        learner.model.eval()
+        loaded_models.append(learner.model)
+        print(f'  loaded {model_type} from {ckpt_path}')
+
+    # Evaluate per domain using averaged softmax
+    dil_tasks   = [['D2'], ['D3']]
+    seen_domains = []
+    accuracy_per_domain = []
+
+    for task_idx, domain in enumerate(dil_tasks):
+        seen_domains.append(domain)
+        valid_df = config.df_DIL_dev_test[config.df_DIL_dev_test['domain'].isin(domain)]
+        dataset_val = DILDataset(valid_df, config.audio_folder_DIL, training=False)
+        loader = torch.utils.data.DataLoader(
+            dataset_val, batch_size=1, shuffle=False,
+            num_workers=num_workers, pin_memory=(device == 'cuda'))
+
+        correct, total = 0, 0
+        nb_tasks_seen = task_idx + 2  # +2 because D1 is task 0
+
+        for inputs, targets, _ in loader:
+            inputs = inputs.float().to(device)
+            targets_idx = torch.argmax(targets, dim=-1)
+
+            # Average softmax across all models, routing per seen domain
+            avg_probs = None
+            for mdl in loaded_models:
+                # Use entropy routing over seen domains (same as _compute_uncertainity)
+                task_probs = []
+                for t in range(nb_tasks_seen):
+                    with torch.no_grad():
+                        p = _tta_predict(mdl, inputs, t, tta_n)
+                    task_probs.append(p)
+                stacked = torch.stack(task_probs, dim=0)  # (nb_tasks_seen, B, C)
+                eps = sys.float_info.min
+                entropy = -torch.sum(stacked * torch.log(stacked + eps), dim=-1)
+                _, best_task = torch.min(entropy, dim=0)
+                sample_idx = torch.arange(inputs.shape[0], device=device)
+                p_best = stacked[best_task, sample_idx, :]
+                avg_probs = p_best if avg_probs is None else avg_probs + p_best
+
+            avg_probs = avg_probs / len(loaded_models)
+            predicts  = torch.max(avg_probs, dim=1)[1]
+            correct  += (predicts.cpu() == targets_idx.cpu()).sum()
+            total    += len(targets_idx)
+
+        acc = round(correct.item() * 100 / total, 2)
+        print(f'seen domain: {domain} and its accuracy: {acc}')
+        accuracy_per_domain.append(acc)
+
+    avg = round(float(np.mean(accuracy_per_domain)), 2)
+    print(f'Average Accuracy:  {avg}')
+
 
 def train(args):
     # Arugments & parameters
@@ -598,7 +709,8 @@ def train(args):
 
 
         model.incremental_setup(train_df, test_df, seen_domains, batch_size, num_workers, device, args)
-        seen_accuracy = model.acc_prev(seen_domains, df_dev_train, df_dev_test, batch_size, num_workers, device)
+        tta_n = getattr(args, 'tta_n', 1)
+        seen_accuracy = model.acc_prev(seen_domains, df_dev_train, df_dev_test, batch_size, num_workers, device, tta_n=tta_n)
         print('Average Accuracy: ', seen_accuracy)
 
 if __name__ == '__main__':
@@ -624,6 +736,7 @@ if __name__ == '__main__':
                                        'bn_se_deep', 'bn_se_clf', 'bn_res',
                                        'bn_gn', 'bn_gn_se',
                                        'bn_res_adil', 'bn_res_clf', 'bn_res_deep',
+                                       'bn_res_deep_clf',
                                        'bn_grn'],
                               default='dtn',
                               help='bn=BatchNorm baseline; dtn=DTN for D2+D3; dtn2=LayerNorm+tanh gate; mixed=BN D2/DTN D3; '
@@ -657,12 +770,36 @@ if __name__ == '__main__':
                               help='Enable waveform-level AudioAugmenter on training data')
     parser_train.add_argument('--class_balance', action='store_true', default=False,
                               help='Use a class-balanced WeightedRandomSampler for training')
+    parser_train.add_argument('--tta_n', type=int, default=1,
+                              help='Test-time augmentation: number of temporal shifts to average '
+                                   '(1 = off, 4–8 is a good range)')
+
+    # Ensemble eval
+    parser_ensemble = subparsers.add_parser('ensemble_eval',
+        help='Average predictions from multiple trained checkpoints')
+    parser_ensemble.add_argument('--ckpt_dirs', type=str, required=True,
+                                 help='Comma-separated list of checkpoint directories '
+                                      '(each must contain checkpoint_D3.pth)')
+    parser_ensemble.add_argument('--model_types', type=str, required=True,
+                                 help='Comma-separated model types matching --ckpt_dirs, '
+                                      'or a single type used for all')
+    parser_ensemble.add_argument('--adapter_depths', type=str, default=None,
+                                 help='Per-task adapter depths for bn_res_deep* models '
+                                      '(e.g. "1,3" for D2=1, D3=3)')
+    parser_ensemble.add_argument('--tta_n', type=int, default=1,
+                                 help='TTA augmentations at inference (1 = off)')
+    parser_ensemble.add_argument('--cuda', action='store_true', default=False)
+    parser_ensemble.add_argument('--num_workers', type=int, default=4)
+
     # Parse arguments
     args = parser.parse_args()
     args.filename = get_filename(__file__)
 
     if args.mode == 'train':
         train(args)
+
+    elif args.mode == 'ensemble_eval':
+        eval_ensemble(args)
 
     else:
         raise Exception('Error argument!')

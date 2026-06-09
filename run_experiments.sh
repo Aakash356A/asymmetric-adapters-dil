@@ -375,4 +375,77 @@ run_experiment bn_clf   5e-4    32    120      perdomain_head_lr5e4
 run_experiment bn_cos   5e-4    32    120      perdomain_cosine_lr5e4
 run_experiment bn_film  1e-4    32    150      film_adapters_ep150
 
+# =====================================================================
+# BATCH 10 — bn_res_deep_clf: deep adapters + per-domain head + supcon
+#
+# Best D2 recipe: bn_res_clf + supcon_0.2  (D2=77.93%)
+# Best D3 recipe: bn_res_deep asym_d3_heavy depth 1,3  (D3=58.93%)
+# This batch stacks both: deep adapters AND a clf head.
+#
+# Hypothesis: clf head fixes D2 ceiling; deep D3 adapters fix D3 ceiling.
+# Run them separately (D2-only depth vs D3-only depth) and together.
+#
+# q args:  model              lr    bs  ep   tag                   lreg  lcon  temp  depths  aug bal
+# =====================================================================
+echo ""
+echo "--- Batch 10: bn_res_deep_clf (deep adapters + clf head + supcon) ---"
+q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup02        0.0   0.2  0.07  "1,3"  0  0
+q bn_res_deep_clf  1e-3  32  120  deep_clf_sym2_sup02      0.0   0.2  0.07  "2,2"  0  0
+_flush_jobs
+
+q bn_res_deep_clf  1e-3  64  120  deep_clf_d3_bs64_sup02   0.0   0.2  0.07  "1,3"  0  0
+q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup01        0.0   0.1  0.07  "1,3"  0  0
+_flush_jobs
+
+# =====================================================================
+# BATCH 11 — Extended training (180 epochs) on best recipe
+#
+# The cosine LR schedule already decays to 1e-7; giving it more epochs
+# lets it descend further without changing any other hyperparameter.
+# Run on both base BN_RES_CLF supcon and the new deep_clf.
+#
+# q args:  model              lr    bs  ep   tag                   lreg  lcon  temp  depths  aug bal
+# =====================================================================
+echo ""
+echo "--- Batch 11: longer training (180 ep) ---"
+q bn_res_clf       1e-3  32  180  clf_sup02_ep180          0.0   0.2  0.07  ""     0  0
+q bn_res_deep_clf  1e-3  32  180  deep_clf_d3_ep180        0.0   0.2  0.07  "1,3"  0  0
+_flush_jobs
+
+# =====================================================================
+# BATCH 12 — TTA evaluation on best existing checkpoints
+#
+# No training needed — just re-run inference with tta_n=8.
+# Uses --resume to skip training and go straight to acc_prev.
+# Fill in BEST_RES_CLF and BEST_RES_DEEP with your actual checkpoint dirs.
+# =====================================================================
+# BEST_RES_CLF="$BASE_DIR/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2"
+# BEST_RES_DEEP="$BASE_DIR/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy"
+#
+# echo ""
+# echo "--- Batch 12: TTA (tta_n=8) on top checkpoints ---"
+# python3 "$SCRIPT" train \
+#     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
+#     --model_type=bn_res_clf --checkpoint_dir="$BEST_RES_CLF" \
+#     --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
+#
+# python3 "$SCRIPT" train \
+#     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
+#     --model_type=bn_res_deep --checkpoint_dir="$BEST_RES_DEEP" \
+#     --adapter_depths=1,3 --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
+
+# =====================================================================
+# BATCH 13 — Ensemble of best D2 and D3 checkpoints
+#
+# Uncomment once BEST_RES_CLF and BEST_RES_DEEP are available.
+# Averages the two models' softmax predictions per domain.
+# =====================================================================
+# echo ""
+# echo "--- Batch 13: ensemble eval ---"
+# python3 "$SCRIPT" ensemble_eval \
+#     --ckpt_dirs="$BEST_RES_CLF,$BEST_RES_DEEP" \
+#     --model_types="bn_res_clf,bn_res_deep" \
+#     --adapter_depths="1,3" \
+#     --tta_n=4 --cuda --num_workers=$SER_WORKERS
+
 

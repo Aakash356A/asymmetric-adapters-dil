@@ -530,6 +530,64 @@ class MCnn14ResClf(_AdapterNet):
 
 
 # ---------------------------------------------------------------------------
+# Idea F -- Deep/asymmetric adapters + per-domain head  (bn_res_deep_clf)
+#
+# Combines MCnn14ResDeep (configurable per-task adapter depth via
+# set_adapter_depths()) with MCnn14ResClf (per-domain head warm-started
+# from D1).  The prior experiments showed:
+#   * deep adapters alone  helped D3 most  (58.93%)
+#   * clf head + supcon    helped D2 most  (77.93%)
+# This variant stacks both mechanisms so each domain gets the adapter
+# depth it needs AND its own classifier head.
+# ---------------------------------------------------------------------------
+
+class MCnn14ResDeepClf(_AdapterNet):
+    """
+    Deep/asymmetric ResBottleneck adapters + per-domain linear head.
+
+    Adapter depth per task is read from _ADAPTER_DEPTHS (set via
+    set_adapter_depths() before instantiation).  Per-domain heads are
+    warm-started from the D1 classifier at checkpoint-load time.
+    D1 (task 0) is always identity adapters + shared frozen head.
+    """
+
+    def _make_adapter(self, channels):
+        return ResBottleneck(channels)
+
+    def __init__(self, sample_rate, window_size, hop_size, mel_bins, fmin,
+                 fmax, classes_num, nb_tasks=1):
+        super().__init__(sample_rate, window_size, hop_size, mel_bins, fmin,
+                         fmax, classes_num, nb_tasks)
+        # Rebuild adapter stacks honouring per-task depth (same as MCnn14ResDeep)
+        adapters = []
+        for t in range(nb_tasks):
+            if t == 0:
+                adapters.append(nn.ModuleList(
+                    [nn.Identity() for _ in _BLOCK_CHANNELS]))
+            else:
+                depth = _ADAPTER_DEPTHS.get(t, 1)
+                adapters.append(nn.ModuleList(
+                    [ResAdapterStack(c, depth) for c in _BLOCK_CHANNELS]))
+        self.adapters = nn.ModuleList(adapters)
+
+        self.fc_heads = nn.ModuleList(
+            [nn.Linear(2048, classes_num) for _ in range(nb_tasks)])
+
+    def on_checkpoint_loaded(self, loaded_task):
+        if loaded_task == 0:
+            with torch.no_grad():
+                for head in self.fc_heads:
+                    head.weight.copy_(self.fc.weight)
+                    head.bias.copy_(self.fc.bias)
+
+    def forward(self, input, task=1):
+        emb = self.get_embedding(input, task)
+        if task == 0:
+            return self.fc(emb)
+        return self.fc_heads[task](emb)
+
+
+# ---------------------------------------------------------------------------
 # GroupNorm variants  (bn_gn, bn_gn_se)
 #
 # Why GroupNorm instead of BatchNorm?
