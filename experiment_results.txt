@@ -56,3 +56,10 @@
 2026-06-09 16:31:38 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_d3_sup02 | D2=77.15% | D3=57.69% | Avg=67.42% | DONE
 2026-06-09 17:34:57 | BN_RES_DEEP_CLF_lr1e-3_bs64_ep120_deep_clf_d3_bs64_sup02 | D2=74.18% | D3=59.18% | Avg=66.68% | DONE
 2026-06-09 17:35:32 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_d3_sup01 | D2=75.12% | D3=57.2%  | Avg=66.16% | DONE
+--- Batch 13: ensemble eval ---
+  loaded bn_res_clf from /home/aakash/dcase_task7/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2/checkpoint_D3.pth
+  [bn_res_deep] per-task adapter depths = {1: 1, 2: 3}
+  loaded bn_res_deep from /home/aakash/dcase_task7/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy/checkpoint_D3.pth
+seen domain: ['D2'] and its accuracy: 76.53
+seen domain: ['D3'] and its accuracy: 57.2
+Average Accuracy:  66.87
