@@ -15,7 +15,7 @@
 # Results are appended to experiment_results.txt after every run.
 # ================================================================
 
-BASE_DIR="/home/aakashd/dcase_task7"
+BASE_DIR="/home/aakash/dcase_task7"
 SCRIPT="$BASE_DIR/code/baseline/baseline_DIL_task7.py"
 D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
@@ -387,15 +387,15 @@ q() {
 #
 # q args:  model              lr    bs  ep   tag                   lreg  lcon  temp  depths  aug bal
 # =====================================================================
-echo ""
-echo "--- Batch 10: bn_res_deep_clf (deep adapters + clf head + supcon) ---"
-q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup02        0.0   0.2  0.07  "1,3"  0  0
-q bn_res_deep_clf  1e-3  32  120  deep_clf_sym2_sup02      0.0   0.2  0.07  "2,2"  0  0
-_flush_jobs
+# echo ""
+# echo "--- Batch 10: bn_res_deep_clf (deep adapters + clf head + supcon) ---"
+# q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup02        0.0   0.2  0.07  "1,3"  0  0
+# q bn_res_deep_clf  1e-3  32  120  deep_clf_sym2_sup02      0.0   0.2  0.07  "2,2"  0  0
+# _flush_jobs
 
-q bn_res_deep_clf  1e-3  64  120  deep_clf_d3_bs64_sup02   0.0   0.2  0.07  "1,3"  0  0
-q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup01        0.0   0.1  0.07  "1,3"  0  0
-_flush_jobs
+# q bn_res_deep_clf  1e-3  64  120  deep_clf_d3_bs64_sup02   0.0   0.2  0.07  "1,3"  0  0
+# q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup01        0.0   0.1  0.07  "1,3"  0  0
+# _flush_jobs
 
 # =====================================================================
 # BATCH 11 — Extended training (180 epochs) on best recipe
@@ -414,38 +414,38 @@ _flush_jobs
 
 # =====================================================================
 # BATCH 12 — TTA evaluation on best existing checkpoints
-#
+
 # No training needed — just re-run inference with tta_n=8.
 # Uses --resume to skip training and go straight to acc_prev.
 # Fill in BEST_RES_CLF and BEST_RES_DEEP with your actual checkpoint dirs.
 # =====================================================================
-# BEST_RES_CLF="$BASE_DIR/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2"
-# BEST_RES_DEEP="$BASE_DIR/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy"
+BEST_RES_CLF="$BASE_DIR/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2"
+BEST_RES_DEEP="$BASE_DIR/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy"
 
-# echo ""
-# echo "--- Batch 12: TTA (tta_n=8) on top checkpoints ---"
-# python3 "$SCRIPT" train \
-#     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
-#     --model_type=bn_res_clf --checkpoint_dir="$BEST_RES_CLF" \
-#     --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
+echo ""
+echo "--- Batch 12: TTA (tta_n=8) on top checkpoints ---"
+python3 "$SCRIPT" train \
+    --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
+    --model_type=bn_res_clf --checkpoint_dir="$BEST_RES_CLF" \
+    --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
 
-# python3 "$SCRIPT" train \
-#     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
-#     --model_type=bn_res_deep --checkpoint_dir="$BEST_RES_DEEP" \
-#     --adapter_depths=1,3 --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
+python3 "$SCRIPT" train \
+    --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
+    --model_type=bn_res_deep --checkpoint_dir="$BEST_RES_DEEP" \
+    --adapter_depths=1,3 --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
 
-# # =====================================================================
-# # BATCH 13 — Ensemble of best D2 and D3 checkpoints
-# #
-# # Uncomment once BEST_RES_CLF and BEST_RES_DEEP are available.
-# # Averages the two models' softmax predictions per domain.
-# # =====================================================================
-# echo ""
-# echo "--- Batch 13: ensemble eval ---"
-# python3 "$SCRIPT" ensemble_eval \
-#     --ckpt_dirs="$BEST_RES_CLF,$BEST_RES_DEEP" \
-#     --model_types="bn_res_clf,bn_res_deep" \
-#     --adapter_depths="1,3" \
-#     --tta_n=4 --cuda --num_workers=$SER_WORKERS
+# =====================================================================
+# BATCH 13 — Ensemble of best D2 and D3 checkpoints
+#
+# Uncomment once BEST_RES_CLF and BEST_RES_DEEP are available.
+# Averages the two models' softmax predictions per domain.
+# =====================================================================
+echo ""
+echo "--- Batch 13: ensemble eval ---"
+python3 "$SCRIPT" ensemble_eval \
+    --ckpt_dirs="$BEST_RES_CLF,$BEST_RES_DEEP" \
+    --model_types="bn_res_clf,bn_res_deep" \
+    --adapter_depths="1,3" \
+    --tta_n=4 --cuda --num_workers=$SER_WORKERS
 
 
