@@ -198,6 +198,109 @@ class SupConLoss:
         return loss[valid].mean()
 
 
+# ============================================================================
+# Learning without Forgetting  (Li & Hoiem, 2016/2017)
+#
+# Unlike L2 weight constraint (Batch 14), LwF regularises *outputs* of the
+# old-task heads, not individual weights.  The LwF paper (Fig. 7) shows
+# output-level distillation strictly dominates weight-level regularisation.
+#
+# Usage flow:
+#   1. Before training task t, call lwf.record() to snapshot old-task outputs
+#      on the current domain's training data (one forward pass, no grad).
+#   2. Inside the training loop, add lambda_lwf * lwf.compute_loss() to the
+#      total loss.  Gradient flows ONLY through shared backbone conv weights
+#      (unfrozen via --unfreeze_blocks) — old-task BN/adapters/heads are
+#      frozen so they contribute no gradient.
+#
+# Important: with a fully frozen backbone (unfreeze_blocks=0) there are no
+# shared trainable parameters in the old-task forward path, so LwF has no
+# effect.  Always pair --lambda_lwf with --unfreeze_blocks >= 1.
+# ============================================================================
+
+class LwFLoss:
+    """
+    Knowledge-distillation loss for domain-incremental learning.
+
+    Parameters
+    ----------
+    temperature : float
+        Softmax temperature for both reference and current outputs (T=2
+        as recommended by Hinton et al. and used in the LwF paper).
+    """
+
+    def __init__(self, temperature: float = 2.0):
+        self.temperature = temperature
+        # {filename -> {old_task_idx -> tensor(C)}}  stored on CPU
+        self._cache: dict = {}
+
+    # ------------------------------------------------------------------
+    @torch.no_grad()
+    def record(self, model, loader, old_tasks: list, device: str):
+        """
+        One forward pass to cache temperature-scaled softmax from the
+        *current* (pre-training) model for every old task head.
+
+        Call this ONCE before the epoch loop starts, with the model in
+        eval mode.  The cache is indexed by filename so it survives
+        across shuffled batches.
+        """
+        if not old_tasks:
+            return
+        model.eval()
+        self._cache.clear()
+        print(f'  [LwF] recording reference outputs  '
+              f'old_tasks={old_tasks}  T={self.temperature} ...')
+        for audio, _, filenames in loader:
+            audio = audio.float().to(device)
+            for t in old_tasks:
+                logits = model(audio, t)                                    # (B, C)
+                probs  = torch.softmax(logits / self.temperature, dim=1)   # (B, C)
+                for fname, p in zip(filenames, probs.cpu()):
+                    self._cache.setdefault(fname, {})[t] = p
+        model.train()
+        print(f'  [LwF] cached outputs for {len(self._cache)} files.')
+
+    # ------------------------------------------------------------------
+    def compute_loss(self, model, audio, filenames, device) -> torch.Tensor:
+        """
+        KD cross-entropy averaged over old tasks:
+
+            L_KD = -1/|T_old|  Σ_t  Σ_i  ref_t(i) · log( softmax(f_t(x_i)/T) )
+
+        Gradient flows through the current model's shared backbone conv
+        weights (if unfrozen).  Old-task BN/adapters/heads are frozen and
+        do not accumulate gradient.
+        """
+        if not self._cache:
+            return torch.tensor(0.0, device=device)
+
+        old_tasks = list(next(iter(self._cache.values())).keys())
+        total = torch.tensor(0.0, device=device)
+
+        for t in old_tasks:
+            refs, valid_idx = [], []
+            for i, fname in enumerate(filenames):
+                entry = self._cache.get(fname, {})
+                if t in entry:
+                    refs.append(entry[t])
+                    valid_idx.append(i)
+            if not refs:
+                continue
+
+            ref_batch   = torch.stack(refs).to(device)   # (B', C) – no grad
+            sub_audio   = audio[valid_idx]                # (B', T_audio)
+
+            # Forward through the old-task head; gradient reaches backbone.
+            curr_logits = model(sub_audio, t)
+            curr_soft   = torch.softmax(curr_logits / self.temperature, dim=1)
+
+            kd = -(ref_batch * torch.log(curr_soft + 1e-8)).sum(dim=1).mean()
+            total = total + kd
+
+        return total / max(len(old_tasks), 1)
+
+
 def _tta_predict(model, audio, task, tta_n=1):
     """Average softmax over TTA augmentations (temporal circular shifts)."""
     if tta_n <= 1:
@@ -442,6 +545,23 @@ class Learner():
         if supcon:
             print(f'  [SupCon] contrastive loss enabled  '
                   f'lambda={lambda_con}  temperature={supcon.temperature}')
+
+        # -- Learning without Forgetting (LwF) ---------------------------
+        # Regularises old-task *outputs* (not weights) so shared backbone
+        # params can adapt without forgetting earlier domains.
+        # Only active when unfreeze_blocks > 0 (shared backbone is unfrozen).
+        lambda_lwf = getattr(args, 'lambda_lwf', 0.0)
+        lwf = None
+        if lambda_lwf > 0.0:
+            if not backbone_params:
+                print('  [LwF] WARNING: lambda_lwf > 0 but unfreeze_blocks=0 — '
+                      'no shared params are trainable, LwF has no effect. '
+                      'Set --unfreeze_blocks >= 1.')
+            lwf = LwFLoss(temperature=getattr(args, 'lwf_temp', 2.0))
+            old_tasks = list(range(self.cur_task))   # e.g. [0] for D2, [0,1] for D3
+            lwf.record(self.model, train_loader, old_tasks, device)
+            print(f'  [LwF] distillation loss enabled  '
+                  f'lambda={lambda_lwf}  T={lwf.temperature}  old_tasks={old_tasks}')
         # ---------------------------------------------------------------
 
         for epoch_idx in range(1, args.epoch + 1):
@@ -449,7 +569,7 @@ class Learner():
 
             sum_loss = 0
             sum_aux_loss = 0
-            for batch_idx, (audio, target, _) in enumerate(train_loader):
+            for batch_idx, (audio, target, filenames) in enumerate(train_loader):
                 optimizer.zero_grad()
                 audio = audio.float()
                 target = target.float()
@@ -473,6 +593,11 @@ class Learner():
                     loss = loss + lambda_con * aux
                     sum_aux_loss += aux.item()
 
+                if lwf is not None:
+                    aux = lwf.compute_loss(self.model, audio, filenames, device)
+                    loss = loss + lambda_lwf * aux
+                    sum_aux_loss += aux.item()
+
                 # L2 regularisation toward previous domain's backbone weights.
                 # Prevents shared conv weights from drifting too far and
                 # corrupting earlier domains' representations.
@@ -491,7 +616,7 @@ class Learner():
 
                 if (batch_idx + 1) % check_point == 0 or (batch_idx + 1) == len(train_loader):
                     aux_str = (f'  aux: {sum_aux_loss / (batch_idx + 1):.3f}'
-                               if (bar or supcon) else '')
+                               if (bar or supcon or lwf) else '')
                     print('==>>> epoch: {}, batch index: {}, step: {}, '
                           'train loss: {:.3f}{}'.format(
                               epoch_idx, batch_idx + 1, step,
@@ -849,6 +974,14 @@ if __name__ == '__main__':
                               help='L2 penalty weight toward previous-domain backbone weights. '
                                    'Prevents shared conv weights from forgetting earlier domains. '
                                    'Try 1e-3 to 1e-2.')
+    parser_train.add_argument('--lambda_lwf', type=float, default=0.0,
+                              help='Weight for Learning without Forgetting (LwF) KD loss. '
+                                   'Regularises old-task *outputs* (better than L2 weight '
+                                   'constraint per Li & Hoiem 2017 Fig 7). Requires '
+                                   '--unfreeze_blocks >= 1 to have any effect. Try 0.5–2.0.')
+    parser_train.add_argument('--lwf_temp', type=float, default=2.0,
+                              help='Softmax temperature for LwF knowledge distillation '
+                                   '(T=2 recommended by Hinton et al. and LwF paper).')
 
     # Ensemble eval
     parser_ensemble = subparsers.add_parser('ensemble_eval',
