@@ -69,3 +69,5 @@ Average Accuracy:  66.87
 2026-06-10 02:18:55 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze1_bb0.05_l2_1e3 | D2=72.61% | D3=57.69% | Avg=65.15% | DONE
 2026-06-10 03:43:43 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_bb0.05_no_l2 | D2=58.53% | D3=66.38% | Avg=62.455% | DONE
 2026-06-10 05:14:36 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_bb0.05_l2_1e2 | D2=75.27% | D3=57.32% | Avg=66.295% | DONE
+2026-06-10 10:54:17 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_d3_sup02 | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
+2026-06-10 10:55:03 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_d3_sup02 | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)

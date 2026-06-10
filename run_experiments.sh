@@ -15,7 +15,7 @@
 # Results are appended to experiment_results.txt after every run.
 # ================================================================
 
-BASE_DIR="/home/aakash/dcase_task7"
+BASE_DIR="/home/aakashd/dcase_task7"
 SCRIPT="$BASE_DIR/code/baseline/baseline_DIL_task7.py"
 D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
@@ -389,7 +389,7 @@ q() {
 # =====================================================================
 # echo ""
 # echo "--- Batch 10: bn_res_deep_clf (deep adapters + clf head + supcon) ---"
-# q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup02        0.0   0.2  0.07  "1,3"  0  0
+q bn_res_deep_clf  1e-3  32  120  deep_clf_d3_sup02        0.0   0.2  0.07  "1,3"  0  0
 # q bn_res_deep_clf  1e-3  32  120  deep_clf_sym2_sup02      0.0   0.2  0.07  "2,2"  0  0
 # _flush_jobs
 
@@ -465,43 +465,43 @@ q() {
 # Grid: unfreeze_blocks ∈ {1, 2}  ×  lambda_l2 ∈ {0, 1e-3, 1e-2}
 # =====================================================================
 
-echo ""
-echo "--- Batch 14: partial backbone unfreezing ---"
+# echo ""
+# echo "--- Batch 14: partial backbone unfreezing ---"
 
-_backbone_run() {
-    local tag=$1 blocks=$2 bb_lr=$3 l2=$4
-    local name="BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_${tag}"
-    local ckpt_dir="$BASE_DIR/checkpoints/$name"
-    mkdir -p "$ckpt_dir"
-    cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
-    echo "  [+] $name  blocks=$blocks  bb_lr=$bb_lr  l2=$l2"
-    python3 "$SCRIPT" train \
-        --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
-        --num_workers=$PAR_WORKERS --epoch=120 \
-        --model_type=bn_res_deep_clf --checkpoint_dir="$ckpt_dir" \
-        --adapter_depths=1,3 --lambda_con=0.2 --con_temp=0.07 \
-        --unfreeze_blocks="$blocks" \
-        --backbone_lr_scale="$bb_lr" \
-        --lambda_l2_backbone="$l2" \
-        --save > "$ckpt_dir/train.log" 2>&1
-    local py_exit=$?
-    local d2 d3 avg ts
-    d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
-    d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
-    avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
-    ts=$(date '+%Y-%m-%d %H:%M:%S')
-    local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
-    printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
-        "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
-    echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%"
-}
+# _backbone_run() {
+#     local tag=$1 blocks=$2 bb_lr=$3 l2=$4
+#     local name="BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_${tag}"
+#     local ckpt_dir="$BASE_DIR/checkpoints/$name"
+#     mkdir -p "$ckpt_dir"
+#     cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
+#     echo "  [+] $name  blocks=$blocks  bb_lr=$bb_lr  l2=$l2"
+#     python3 "$SCRIPT" train \
+#         --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
+#         --num_workers=$PAR_WORKERS --epoch=120 \
+#         --model_type=bn_res_deep_clf --checkpoint_dir="$ckpt_dir" \
+#         --adapter_depths=1,3 --lambda_con=0.2 --con_temp=0.07 \
+#         --unfreeze_blocks="$blocks" \
+#         --backbone_lr_scale="$bb_lr" \
+#         --lambda_l2_backbone="$l2" \
+#         --save > "$ckpt_dir/train.log" 2>&1
+#     local py_exit=$?
+#     local d2 d3 avg ts
+#     d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+#     d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+#     avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
+#     ts=$(date '+%Y-%m-%d %H:%M:%S')
+#     local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
+#     printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
+#         "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
+#     echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%"
+# }
 
-# Pair 1: unfreeze 1 block vs 2 blocks — run sequentially to avoid GPU OOM
-_backbone_run "unfreeze2_bb0.05_l2_1e3"  2  0.05  1e-3
-_backbone_run "unfreeze1_bb0.05_l2_1e3"  1  0.05  1e-3
+# # Pair 1: unfreeze 1 block vs 2 blocks — run sequentially to avoid GPU OOM
+# _backbone_run "unfreeze2_bb0.05_l2_1e3"  2  0.05  1e-3
+# _backbone_run "unfreeze1_bb0.05_l2_1e3"  1  0.05  1e-3
 
-# Pair 2: isolate the effect of L2 strength on the 2-block unfreeze — sequential
-_backbone_run "unfreeze2_bb0.05_no_l2"   2  0.05  0.0
-_backbone_run "unfreeze2_bb0.05_l2_1e2"  2  0.05  1e-2
+# # Pair 2: isolate the effect of L2 strength on the 2-block unfreeze — sequential
+# _backbone_run "unfreeze2_bb0.05_no_l2"   2  0.05  0.0
+# _backbone_run "unfreeze2_bb0.05_l2_1e2"  2  0.05  1e-2
 
 
