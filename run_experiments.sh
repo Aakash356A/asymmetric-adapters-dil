@@ -21,7 +21,7 @@ D1_CKPT="$BASE_DIR/pretrained_models/checkpoint_D1.pth"
 RESULTS_LOG="$BASE_DIR/experiment_results.txt"
 
 # ── Parallel settings ────────────────────────────────────────────────────
-MAX_PARALLEL=3   # jobs to run at once  (12 GB GPU ÷ 3 ≈ 4 GB each)
+MAX_PARALLEL=1   # jobs to run at once  (12 GB GPU ÷ 3 ≈ 4 GB each)
                  # → set to 2 if you see CUDA OOM errors
 
 SER_WORKERS=16   # dataloader workers for serial runs
@@ -419,20 +419,20 @@ q() {
 # Uses --resume to skip training and go straight to acc_prev.
 # Fill in BEST_RES_CLF and BEST_RES_DEEP with your actual checkpoint dirs.
 # =====================================================================
-BEST_RES_CLF="$BASE_DIR/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2"
-BEST_RES_DEEP="$BASE_DIR/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy"
+# BEST_RES_CLF="$BASE_DIR/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2"
+# BEST_RES_DEEP="$BASE_DIR/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy"
 
-echo ""
-echo "--- Batch 12: TTA (tta_n=8) on top checkpoints ---"
-python3 "$SCRIPT" train \
-    --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
-    --model_type=bn_res_clf --checkpoint_dir="$BEST_RES_CLF" \
-    --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
+# echo ""
+# echo "--- Batch 12: TTA (tta_n=8) on top checkpoints ---"
+# python3 "$SCRIPT" train \
+#     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
+#     --model_type=bn_res_clf --checkpoint_dir="$BEST_RES_CLF" \
+#     --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
 
-python3 "$SCRIPT" train \
-    --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
-    --model_type=bn_res_deep --checkpoint_dir="$BEST_RES_DEEP" \
-    --adapter_depths=1,3 --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
+# python3 "$SCRIPT" train \
+#     --augmentation=none --learning_rate=1e-3 --batch_size=32 --epoch=1 \
+#     --model_type=bn_res_deep --checkpoint_dir="$BEST_RES_DEEP" \
+#     --adapter_depths=1,3 --lambda_con=0.2 --tta_n=8 --resume --cuda --num_workers=$SER_WORKERS --save
 
 # =====================================================================
 # BATCH 13 — Ensemble of best D2 and D3 checkpoints
@@ -440,15 +440,15 @@ python3 "$SCRIPT" train \
 # Uncomment once BEST_RES_CLF and BEST_RES_DEEP are available.
 # Averages the two models' softmax predictions per domain.
 # =====================================================================
-echo ""
-echo "--- Batch 13: ensemble eval ---"
-python3 "$SCRIPT" ensemble_eval \
-    --ckpt_dirs="$BEST_RES_CLF,$BEST_RES_DEEP" \
-    --model_types="bn_res_clf,bn_res_deep" \
-    --adapter_depths="1,3" \
-    --tta_n=4 --cuda --num_workers=$SER_WORKERS
+# echo ""
+# echo "--- Batch 13: ensemble eval ---"
+# python3 "$SCRIPT" ensemble_eval \
+#     --ckpt_dirs="$BEST_RES_CLF,$BEST_RES_DEEP" \
+#     --model_types="bn_res_clf,bn_res_deep" \
+#     --adapter_depths="1,3" \
+#     --tta_n=4 --cuda --num_workers=$SER_WORKERS
 
-# =====================================================================
+# # =====================================================================
 # BATCH 14 — Partial backbone unfreezing
 #
 # Shared backbone conv weights are frozen in all prior runs.  Here we
@@ -496,14 +496,12 @@ _backbone_run() {
     echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%"
 }
 
-# Pair 1: unfreeze 1 block vs 2 blocks, with moderate L2 anchor
-_backbone_run "unfreeze1_bb0.05_l2_1e3"  1  0.05  1e-3  &  pid1=$!
-_backbone_run "unfreeze2_bb0.05_l2_1e3"  2  0.05  1e-3  &  pid2=$!
-wait "$pid1" "$pid2"
+# Pair 1: unfreeze 1 block vs 2 blocks — run sequentially to avoid GPU OOM
+_backbone_run "unfreeze2_bb0.05_l2_1e3"  2  0.05  1e-3
+_backbone_run "unfreeze1_bb0.05_l2_1e3"  1  0.05  1e-3
 
-# Pair 2: isolate the effect of L2 strength on the 2-block unfreeze
-_backbone_run "unfreeze2_bb0.05_no_l2"   2  0.05  0.0   &  pid3=$!
-_backbone_run "unfreeze2_bb0.05_l2_1e2"  2  0.05  1e-2  &  pid4=$!
-wait "$pid3" "$pid4"
+# Pair 2: isolate the effect of L2 strength on the 2-block unfreeze — sequential
+_backbone_run "unfreeze2_bb0.05_no_l2"   2  0.05  0.0
+_backbone_run "unfreeze2_bb0.05_l2_1e2"  2  0.05  1e-2
 
 
