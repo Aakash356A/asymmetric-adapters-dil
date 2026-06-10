@@ -448,4 +448,62 @@ python3 "$SCRIPT" ensemble_eval \
     --adapter_depths="1,3" \
     --tta_n=4 --cuda --num_workers=$SER_WORKERS
 
+# =====================================================================
+# BATCH 14 — Partial backbone unfreezing
+#
+# Shared backbone conv weights are frozen in all prior runs.  Here we
+# selectively unfreeze the top N blocks and let them slowly adapt.
+#
+# Forgetting protection has two layers:
+#   1. backbone_lr_scale  — backbone trains at lr × scale (slow drift)
+#   2. lambda_l2_backbone — L2 penalty toward the *previous* domain's
+#      checkpoint weights.  The anchor chains automatically:
+#        D2 regularises toward D1 weights
+#        D3 regularises toward the (already-D1-anchored) D2 weights
+#
+# Base recipe: bn_res_deep_clf  depths=1,3  supcon=0.2  (best so far)
+# Grid: unfreeze_blocks ∈ {1, 2}  ×  lambda_l2 ∈ {0, 1e-3, 1e-2}
+# =====================================================================
+
+echo ""
+echo "--- Batch 14: partial backbone unfreezing ---"
+
+_backbone_run() {
+    local tag=$1 blocks=$2 bb_lr=$3 l2=$4
+    local name="BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_${tag}"
+    local ckpt_dir="$BASE_DIR/checkpoints/$name"
+    mkdir -p "$ckpt_dir"
+    cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
+    echo "  [+] $name  blocks=$blocks  bb_lr=$bb_lr  l2=$l2"
+    python3 "$SCRIPT" train \
+        --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
+        --num_workers=$PAR_WORKERS --epoch=120 \
+        --model_type=bn_res_deep_clf --checkpoint_dir="$ckpt_dir" \
+        --adapter_depths=1,3 --lambda_con=0.2 --con_temp=0.07 \
+        --unfreeze_blocks="$blocks" \
+        --backbone_lr_scale="$bb_lr" \
+        --lambda_l2_backbone="$l2" \
+        --save > "$ckpt_dir/train.log" 2>&1
+    local py_exit=$?
+    local d2 d3 avg ts
+    d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
+    printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
+        "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
+    echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%"
+}
+
+# Pair 1: unfreeze 1 block vs 2 blocks, with moderate L2 anchor
+_backbone_run "unfreeze1_bb0.05_l2_1e3"  1  0.05  1e-3  &  pid1=$!
+_backbone_run "unfreeze2_bb0.05_l2_1e3"  2  0.05  1e-3  &  pid2=$!
+wait "$pid1" "$pid2"
+
+# Pair 2: isolate the effect of L2 strength on the 2-block unfreeze
+_backbone_run "unfreeze2_bb0.05_no_l2"   2  0.05  0.0   &  pid3=$!
+_backbone_run "unfreeze2_bb0.05_l2_1e2"  2  0.05  1e-2  &  pid4=$!
+wait "$pid3" "$pid4"
+
 

@@ -370,15 +370,49 @@ class Learner():
             # lr = args.learning_rate / 10
             lr = args.learning_rate
 
-        print(f"params to be adapted")
+        # ── Partial backbone unfreezing ──────────────────────────────
+        # Unfreeze the top N conv blocks of the shared backbone for D2/D3.
+        # The blocks are ordered from deepest (most semantic) to shallowest:
+        #   block6 (2048ch) → block5 (1024ch) → block4 (512ch) → ...
+        # Conv weights (.conv1.weight / .conv2.weight) are shared across
+        # all domains, so we protect them from drifting too far using an
+        # L2 penalty toward the previous domain's checkpoint weights
+        # (backbone_ref, stored in load_checkpoint).
+        unfreeze_blocks    = getattr(args, 'unfreeze_blocks', 0)
+        backbone_lr_scale  = getattr(args, 'backbone_lr_scale', 0.1)
+        lambda_l2_backbone = getattr(args, 'lambda_l2_backbone', 0.0)
 
+        _BLOCK_ORDER = ['conv_block6', 'conv_block5', 'conv_block4',
+                        'conv_block3', 'conv_block2', 'conv_block1']
+        blocks_to_unfreeze = set(_BLOCK_ORDER[:max(0, unfreeze_blocks)])
+
+        backbone_params = []
+        if unfreeze_blocks > 0 and self.cur_task > 0:
+            for name, param in self.model.named_parameters():
+                block = name.split('.')[0]
+                if (block in blocks_to_unfreeze
+                        and ('.conv1.weight' in name or '.conv2.weight' in name)):
+                    param.requires_grad_(True)
+                    backbone_params.append(param)
+            print(f'  [backbone] unfreezing top {unfreeze_blocks} block(s): '
+                  f'{sorted(blocks_to_unfreeze)}  '
+                  f'lr={lr * backbone_lr_scale:.2e}  lambda_l2={lambda_l2_backbone}')
+
+        print(f"params to be adapted")
         for name, param in self.model.named_parameters():
             if param.requires_grad:
                 print(name)
         criteria = nn.CrossEntropyLoss(ignore_index=-1)
 
-        optimizer = torch.optim.Adam(non_frozen_parameters, lr=lr, betas=(0.9, 0.999),
-                                     eps=1e-08, weight_decay=0., amsgrad=True)
+        # Two-group optimizer: adapters/BN at full lr, backbone at scaled lr
+        if backbone_params:
+            optimizer = torch.optim.Adam(
+                [{'params': non_frozen_parameters, 'lr': lr},
+                 {'params': backbone_params,       'lr': lr * backbone_lr_scale}],
+                betas=(0.9, 0.999), eps=1e-08, weight_decay=0., amsgrad=True)
+        else:
+            optimizer = torch.optim.Adam(non_frozen_parameters, lr=lr, betas=(0.9, 0.999),
+                                         eps=1e-08, weight_decay=0., amsgrad=True)
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epoch, eta_min=1e-7)
 
         best_loss = float('inf')
@@ -439,6 +473,17 @@ class Learner():
                     loss = loss + lambda_con * aux
                     sum_aux_loss += aux.item()
 
+                # L2 regularisation toward previous domain's backbone weights.
+                # Prevents shared conv weights from drifting too far and
+                # corrupting earlier domains' representations.
+                if lambda_l2_backbone > 0.0 and backbone_params:
+                    ref = getattr(self, 'backbone_ref', {})
+                    l2_bb = torch.tensor(0.0, device=audio.device)
+                    for name, param in self.model.named_parameters():
+                        if name in ref and param.requires_grad:
+                            l2_bb = l2_bb + (param - ref[name].to(audio.device)).pow(2).sum()
+                    loss = loss + lambda_l2_backbone * l2_bb
+
                 sum_loss += loss.item()
                 loss.backward()
                 optimizer.step()
@@ -462,6 +507,17 @@ class Learner():
                            os.path.join(save_path, 'checkpoint_' + 'D' + str(self.cur_task + 1) + '.pth'))
                 print('==>>> epoch: {}, best loss improved to {:.4f}, checkpoint saved.'.format(epoch_idx, best_loss))
 
+        # Update backbone reference to the current domain's adapted weights so
+        # the NEXT domain regularises toward these (not the original D1 weights).
+        # This implements the chained L2 anchor: D1→D2 anchor, then D2→D3 anchor.
+        if backbone_params:
+            self.backbone_ref = {
+                name: param.clone().detach()
+                for name, param in self.model.named_parameters()
+                if ('.conv1.weight' in name or '.conv2.weight' in name)
+                   and 'conv_block' in name
+            }
+
     def load_checkpoint(self, device):
         resume_path = os.path.join(config.save_resume_path, 'checkpoint_' + 'D' + str(self.cur_task + 1) + '.pth')
         incompatible = self.model.load_state_dict(
@@ -474,6 +530,15 @@ class Learner():
         if hasattr(self.model, 'on_checkpoint_loaded'):
             self.model.on_checkpoint_loaded(self.cur_task)
         print('model trained on Task D{} is loaded'.format(self.cur_task + 1))
+        # Store a frozen snapshot of backbone conv weights.
+        # Used as the L2 anchor for partial backbone unfreezing:
+        #   D2 regularises toward D1 weights; D3 toward the D2-adapted weights.
+        self.backbone_ref = {
+            name: param.clone().detach()
+            for name, param in self.model.named_parameters()
+            if ('.conv1.weight' in name or '.conv2.weight' in name)
+               and 'conv_block' in name
+        }
 
     def incremental_setup(self, train_df, valid_df, seen_domains, batch_size, num_workers, device, args):
 
@@ -773,6 +838,17 @@ if __name__ == '__main__':
     parser_train.add_argument('--tta_n', type=int, default=1,
                               help='Test-time augmentation: number of temporal shifts to average '
                                    '(1 = off, 4–8 is a good range)')
+    parser_train.add_argument('--unfreeze_blocks', type=int, default=0,
+                              help='Unfreeze the top N conv blocks of the shared backbone for D2/D3. '
+                                   '0=fully frozen (default); 1=block6 only; 2=blocks 5+6; '
+                                   '3=blocks 4+5+6. Backbone updates use --backbone_lr_scale.')
+    parser_train.add_argument('--backbone_lr_scale', type=float, default=0.1,
+                              help='LR multiplier for unfrozen backbone params relative to '
+                                   'adapter/BN lr. E.g. 0.05 means backbone trains at lr/20.')
+    parser_train.add_argument('--lambda_l2_backbone', type=float, default=0.0,
+                              help='L2 penalty weight toward previous-domain backbone weights. '
+                                   'Prevents shared conv weights from forgetting earlier domains. '
+                                   'Try 1e-3 to 1e-2.')
 
     # Ensemble eval
     parser_ensemble = subparsers.add_parser('ensemble_eval',
