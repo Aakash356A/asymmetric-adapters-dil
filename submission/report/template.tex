@@ -1,12 +1,13 @@
 % --------------------------------------------------------------------------
-% Template for DCASE 2026 technical reports; to be used with:
-%          dcase2026_techrep.sty  - DCASE 2026 LaTeX style file, and
-%          IEEEbib.bst - IEEE bibliography style file.
-% Adapted from spconf.sty and waspaa15.sty
+% DCASE 2026 Challenge — Task 7 (Domain-Incremental Learning for Audio
+% Classification) technical report.
+% To be used with:
+%   dcase2026_techrep.sty  - DCASE 2026 LaTeX style file, and
+%   IEEEtran.bst           - IEEE bibliography style file.
 % --------------------------------------------------------------------------
 
 \documentclass{article}
-\usepackage{dcase2026_techrep,amsmath,graphicx,url,times,booktabs, tabularx}
+\usepackage{dcase2026_techrep,amsmath,graphicx,url,times,booktabs,tabularx}
 
 % Example definitions.
 % --------------------
@@ -16,52 +17,22 @@
 
 % Title.
 % --------------------
-\title{AUTHOR GUIDELINES FOR DCASE 2026 CHALLENGE TECHNICAL REPORTS}
+\title{PER-DOMAIN RESIDUAL ADAPTERS WITH ASYMMETRIC DEPTH FOR\\
+DOMAIN-INCREMENTAL AUDIO CLASSIFICATION}
 
-% Single addresses (uncomment and modify for single-address case).
-% --------------------
-% \name{Author(s) Name(s)\thanks{Thanks to XYZ agency for funding.}}
-% \address{Author Affiliation(s)}
-%
-% For example:
-% ------------
-% \address{School\\
-%       Department\\
-%       Address}
-
-% Two addresses
-% --------------------
+% NOTE: author block below uses the baseline authors as placeholders.
+% Replace with the correct author names / affiliations before submission.
 \twoauthors
-  {John Doe\sthanks{Thanks to ABC agency for funding.}}
-    {Fictional University\\
-Computer Science Dept., 2133 Long Road\\
-     Gotham, NY 10027, USA \\
-     john@fictional.edu}
-  {Maria Ortega\sthanks{Thanks to XYZ agency for funding.}}
-    {  University of the Imagination \\
-     Big Engineering Building, 8765 Dream Blvd. \\
-     New Chicago, IL 60626, USA \\
-     maria@imagination.edu}
-
-% Authors in two lines, use in case of many authors with many affiliations (uncomment and modify).
-% --------------------
-% \name{John Doe$^{1}\sthanks{Thanks to ABC agency for funding.}$,
-%       Maria Ortega$^{1}\sthanks{Thanks to XYZ agency for funding.}$,
-%       Maria Doe$^{2}$, 
-%       John Ortega$^{2}$,
-%       John Maria$^{3}$, 
-%       }
-% \secondlinename{	  
-%       David Smith$^{2}$, 
-%       Maria Smith$^{3}$,
-%       }
-%       % fixed *.sty to allow names on multiple lines
-% \address{$^1$ Fictional University, Computer Science Dept., Gotham, USA, \{john, maria\}@fictional.edu\\          
-%         $^2$ University of the Imagination, Computer Science Dept., New Chicago, USA, \\
-%         \{maria, john, david\}@fictional.edu\\ 
-%         $^3$ University of the Fantasy, Department of Electronics, Pittsburgh, USA, 
-%         \{john, maria\}@fantasy.edu\\
-%  }
+  {Manjunath Mulimani$^{1}$, Riccardo Casciotti$^{2}$}
+    {$^{1}$ Aalborg University\\
+     Department of Electronic Systems\\
+     Aalborg, Denmark \\
+     manjunathm@es.aau.dk}
+  {Manu Harju$^{2}$, Annamaria Mesaros$^{2}$}
+    {$^{2}$ Tampere University \\
+     Signal Processing Research Centre \\
+     Tampere, Finland \\
+     annamaria.mesaros@tuni.fi}
 
 \begin{document}
 
@@ -71,155 +42,233 @@ Computer Science Dept., 2133 Long Road\\
 \begin{sloppy}
 
 \begin{abstract}
-In order to help authors prepare their technical reports for DCASE 2026 challenge, we compile a list of guidelines and put together two templates for users of both \LaTeX\ and Microsoft Word, which can be downloaded from the website at \cite{dcase2026web}. These guidelines and templates are modified from those for past ICASSP and WASPAA workshops. The paper can be written using American or British spelling, provided the usage is consistent.
+We describe our submission to DCASE 2026 Task~7, Domain-Incremental Learning
+(DIL) for audio classification. Starting from the released ADIL baseline,
+which adds per-domain Batch Normalization (BN) and a per-domain classifier
+to a shared, frozen CNN14 backbone, we identify the limited per-domain
+capacity as the main bottleneck for the harder domains. We add, on top of
+the frozen backbone, a stack of zero-initialised \emph{residual bottleneck
+adapters} after every convolutional block. Because each domain owns an
+independent adapter stack, the depth of the stack can be set
+\emph{per domain}: the more difficult domain (D3) receives a deeper stack
+than the easier one (D2). Combined with a warm-started per-domain classifier
+head and a supervised contrastive auxiliary loss, this raises the
+domain-agnostic average accuracy on the development set from $50.0\%$
+(reproduced baseline) to $68.5\%$, with D2 and D3 improving from
+$59.2\%/40.8\%$ to $76.2\%/60.8\%$. The shared backbone and the D1 behaviour
+are preserved bit-for-bit, so no previously learned domain is forgotten.
 \end{abstract}
 
 \begin{keywords}
-One, two, three, four, five
+Domain-incremental learning, continual learning, acoustic
+classification, residual adapters, catastrophic forgetting
 \end{keywords}
 
 
 \section{Introduction}
 \label{sec:intro}
 
-The guidelines given below include complete descriptions of the fonts, spacing, and related information. Please use this template to produce uniformly looking DCASE 2026 Challenge technical reports.
-If you have any questions, please email them to dcase.challenge@gmail.com.
+Domain-incremental learning (DIL) requires a single model to classify the
+same set of sound classes as the recording conditions change over a sequence
+of domains $\mathcal{D}_1 \rightarrow \mathcal{D}_2 \rightarrow \mathcal{D}_3$,
+without access to the data of previous domains and without forgetting them
+\cite{mulimani2025dil}. Naively fine-tuning the whole network on a new domain
+overwrites the knowledge of earlier domains (catastrophic forgetting), while
+freezing the network entirely prevents it from adapting (poor plasticity).
 
-\textbf{Please note that headers for challenge and workshop submissions have different header.} Use the appropriate template!
+The DCASE 2026 Task~7 baseline addresses this trade-off with the ADIL
+approach \cite{mulimani2025dil}: a CNN14 \cite{kong2020panns} backbone is
+trained on $\mathcal{D}_1$ and then \emph{frozen}; for every subsequent
+domain only a small set of domain-specific parameters is learned, namely the
+affine Batch-Normalization (BN) parameters of that domain and a residual
+correction to the classifier. At inference the domain identity is not given,
+so the model forward-passes through every domain's specific layers and
+selects the domain whose prediction has the lowest entropy
+(domain-agnostic, ADIL).
+
+This design forgets nothing, because the parameters of earlier domains are
+never touched, but its plasticity is limited: a handful of affine BN
+parameters is often too little capacity to absorb a large distribution shift,
+which is exactly what we observe on the two harder development domains. The
+contribution of this report is to \emph{increase the per-domain capacity}
+while keeping the forgetting-free property intact. Specifically, we (1) add
+per-domain residual bottleneck adapters after every convolutional block, (2)
+make the adapter depth \emph{asymmetric}, giving the harder domain more
+capacity than the easier one, (3) replace the shared classifier with a
+warm-started per-domain head, and (4) tighten the per-class embedding
+clusters with a supervised contrastive loss. All additions are per-domain
+and zero/identity-initialised, so $\mathcal{D}_1$ is reproduced exactly and
+the domains remain mutually independent.
 
 
+\section{Method}
+\label{sec:method}
 
+\subsection{Backbone and per-domain Batch Normalization}
+\label{ssec:backbone}
 
-\section{Formatting your paper}
-\label{sec:format}
+We keep the baseline front-end and backbone unchanged. Audio is resampled to
+$32$~kHz and cut to $4$~s segments; a log-mel spectrogram with $64$ mel bands
+is computed with a window of $1024$ and a hop of $320$ samples. The backbone
+is CNN14 \cite{kong2020panns}: six convolutional blocks producing
+$\{64,128,256,512,1024,2048\}$ channels, each block being two
+$3\times3$ convolutions, each followed by BN and ReLU, and a $2\times2$
+average pooling. Following the baseline, the convolutional weights are loaded
+from the released $\mathcal{D}_1$ checkpoint and \emph{frozen for all
+domains}; only the BN layers are made domain-specific, i.e.\ each domain $t$
+owns its own BN parameters and statistics.
 
-All technical reports must be submitted as PDF files and must be formatted for white US letter paper (8.5 $\times$ 11 inches). Please do {\bf not} use A4-size papers. All printed material, including text, illustrations, and charts, must be kept within a print area of 7.0 inches (178 mm) wide by 8.9 inches (226 mm) high. Do not write or print anything outside the print area. The top margin must be 1 inch (25 mm), except for the title page, and the left margin must be 0.75 inch (19 mm).  All {\it text} must be in a two-column format. Columns are to be 3.29 inches (83.5 mm) wide, with a 0.31 inch (8 mm) space between them. Text must be fully justified. 
+\subsection{Per-domain residual bottleneck adapters}
+\label{ssec:adapters}
 
-\section{NUMBER OF PAGES}
-\label{sec:pagelimit}
-
-You are allowed a total of up to 5 pages for your DCASE 2026 Challenge technical report. The report can also be shorter and does not need to include a literature review. If however you plan to submit the same report as a regular paper to DCASE 2026 Workshop, please structure it as a scientific paper and respect the rules given for the workshop paper formatting. 
-%(that is, 4+1 pages, up to 4 pages for technical content including figures and possible references, with the optional 5th page containing only references. 
-For the workshop submission you will also have to use the workshop paper template, which has different header.
-
-\section{PAGE TITLE SECTION}
-\label{sec:pagestyle}
-
-The paper title (on the first page) should begin 0.98 inches (25 mm) from the top edge of the page, centered, completely capitalized, and in Times 14-point, boldface type. The authors' name(s) and affiliation(s) appear below the title in capital and lower case letters.  Papers with multiple authors and affiliations may require two or more lines for this information.
-
-\section{TYPE-STYLE AND FONTS}
-\label{sec:typestyle}
-
-We strongly encourage you to use Times-Roman font. In addition, this will give the proceedings a more uniform look. Use a font that is no smaller than nine point type throughout the paper, including figure captions.
-
-In nine point type font, capital letters are 2 mm high. {\bf If you use the smallest point size, there should be no more than 3.2 lines/cm (8 lines/inch) vertically.} This is a minimum spacing; 2.75 lines/cm (7 lines/inch) will make the paper much more readable. Larger type sizes require correspondingly larger vertical spacing. Please do not double-space your paper. True-Type 1 fonts are preferred.
-
-The first paragraph in each section should not be indented, but all the following paragraphs within the section should be indented as these paragraphs demonstrate.
-
-\section{MAJOR HEADINGS}
-\label{sec:majhead}
-
-Major headings, for example, ``1. Introduction'', should appear in all capital letters, bold face if possible, centered in the column, with one blank line before, and one blank line after. Use a period (``.'') after the heading number, not a colon.
-
-\subsection{Subheadings}
-\label{ssec:subhead}
-
-Subheadings should appear in lower case (initial word capitalized) in boldface. They should start at the left margin on a separate line. 
- 
-\subsubsection{Sub-subheadings}
-\label{sssec:subsubhead}
-
-Sub-subheadings, as in this paragraph, are discouraged. However, if you must use them, they should appear in lower case (initial word capitalized) and start at the left margin on a separate line, with paragraph text beginning on the following line. They should be in italics. 
- 
-
-\section{Page Numbering, Header, and Footer}
-\label{sec:page}
-
-Please do {\bf not} paginate your paper. In addition, please do {\bf not} change and remove the header and footer.
-
-\section{ILLUSTRATIONS, GRAPHS, AND PHOTOGRAPHS}
-\label{sec:illust}
-
-Illustrations must appear within the designated margins. They may span the two columns. If possible, position illustrations at the top of columns, rather than in the middle or at the bottom. Caption and number every illustration. All halftone illustrations must be clear black and white prints. Colors may be used, but they should be selected so as to be readable when printed on a black-only printer.
-
-Since there are many ways, often incompatible, of including images (e.g., with experimental results) in a \LaTeX\ document, an example of how to do this is presented in Fig.~\ref{fig:results}. 
-
-% Below is an example of how to insert images. 
-% -------------------------------------------------------------------------
-\begin{figure}[t]
-  \centering
-  \centerline{\includegraphics[width=\columnwidth]{fig1a}}
-  \caption{Example of a figure with experimental results.}
-  \label{fig:results}
-\end{figure}
-
-\section{Equations}
-\label{sec:equations}
-
-Equations should be placed on separate lines and consecutively numbered with equation numbers in parentheses flush with the right margin, as illustrated in (\ref{eqn:wave_equation}) that gives the homogeneous acoustic wave equation in Cartesian coordinates \cite{eWilliams1999},
+To give each domain more than the affine BN capacity, we insert a residual
+bottleneck adapter after each of the six convolutional blocks. For a feature
+map with $C$ channels the adapter is
 \begin{equation}
-  \label{eqn:wave_equation}
-    \Delta^2p(x,y,z,t)-
-    \displaystyle\frac{1}{c^2}\frac{\partial^2p(x,y,z,t)}{\partial t^2}=0,
+  \label{eqn:adapter}
+  \mathrm{Adapter}(\symvec{x}) =
+    \symvec{x} + W_{\text{up}}\,\sigma\!\big(W_{\text{down}}\,\symvec{x}\big),
 \end{equation}
-where $p(x,y,z,t)$ is an infinitesimal variation of acoustic pressure from its equilibrium value at position $(x,y,z)$ and time $t$, and where $c$ denotes the speed of sound.
+where $W_{\text{down}}$ is a $1\times1$ convolution reducing the channels to
+$C/4$, $\sigma$ is a ReLU, and $W_{\text{up}}$ is a $1\times1$ convolution
+restoring $C$ channels. $W_{\text{up}}$ is \emph{zero-initialised}, so at the
+start of training every adapter is the identity map and the pretrained
+features are left untouched; the adapter then learns a domain-specific
+feature shift on top of the frozen backbone. Domain $\mathcal{D}_1$ uses
+identity adapters, so its behaviour is reproduced bit-for-bit.
 
-Symbols in your equation should be defined before the equation appears or immediately following.  Use (1), not Eq. (1) or equation (1), except at the beginning of a sentence:  ``Equation (1) is ...''
+\subsection{Asymmetric adapter depth}
+\label{ssec:asym}
+
+Because each domain owns an independent stack of adapters, the \emph{number}
+of adapters stacked after each block can be chosen per domain. We stack
+$d_t$ residual adapters for domain $t$:
+\begin{equation}
+  \label{eqn:stack}
+  \mathrm{Stack}_t(\symvec{x}) =
+    \big(\mathrm{Adapter}^{(d_t)} \circ \cdots \circ
+         \mathrm{Adapter}^{(1)}\big)(\symvec{x}).
+\end{equation}
+Every adapter in the stack is zero-initialised, so a stack of any depth still
+starts as the identity. We set $d_{\mathrm{D2}}=1$ and $d_{\mathrm{D3}}=3$:
+the harder domain D3 receives three times the per-domain convolutional
+capacity of D2. Since the two stacks are completely independent, increasing
+D3's depth cannot affect D2.
+
+\subsection{Per-domain classifier head}
+\label{ssec:head}
+
+The baseline reuses the frozen $\mathcal{D}_1$ classifier for all domains.
+We instead give every domain $t>0$ its own linear head
+$\symvec{W}_t\in\mathbb{R}^{C\times K}$ ($K=10$ classes), warm-started from
+the $\mathcal{D}_1$ classifier at checkpoint-load time. $\mathcal{D}_1$ keeps
+the original head. The head is trained jointly with the domain's BN and
+adapters.
+
+\subsection{Training objective}
+\label{ssec:loss}
+
+Each domain is trained with cross-entropy plus a supervised contrastive
+auxiliary loss \cite{khosla2020supcon} applied to the L2-normalised global
+embedding $\symvec{z}$:
+\begin{equation}
+  \label{eqn:supcon}
+  \mathcal{L}_{\mathrm{con}} =
+    \sum_{i}\frac{-1}{|P(i)|}\sum_{p\in P(i)}
+      \log\frac{\exp(\symvec{z}_i\!\cdot\!\symvec{z}_p/\tau)}
+               {\sum_{a\neq i}\exp(\symvec{z}_i\!\cdot\!\symvec{z}_a/\tau)},
+\end{equation}
+where $P(i)$ is the set of samples sharing $i$'s class. The total loss is
+$\mathcal{L} = \mathcal{L}_{\mathrm{CE}} +
+\lambda\,\mathcal{L}_{\mathrm{con}}$ with $\lambda=0.2$ and $\tau=0.07$,
+which pulls same-class embeddings together and pushes different-class
+embeddings apart, sharpening the per-domain decision boundaries.
+
+\subsection{Inference}
+\label{ssec:inference}
+
+Inference is domain-agnostic and identical to the baseline ADIL rule: the
+input is forward-passed through every seen domain's specific layers, and the
+domain with the minimum prediction entropy is selected to produce the final
+class label.
 
 
+\section{Experiments and results}
+\label{sec:results}
 
-\section{FOOTNOTES}
-\label{sec:foot}
+\subsection{Setup}
+\label{ssec:setup}
 
-Use footnotes sparingly and place them at the bottom of the column on the page on which they are referenced. Use Times 9-point type, single-spaced. To help your readers, avoid using footnotes altogether and include necessary peripheral observations in the text (within parentheses, if you prefer, as in this sentence).
+All systems are trained on the Task~7 development set, one domain at a time,
+starting from the released $\mathcal{D}_1$ checkpoint. We use Adam with
+learning rate $10^{-3}$, batch size $32$, and a CosineAnnealingLR schedule
+decaying to $10^{-7}$. Only the current domain's parameters (BN, adapters,
+head) are updated at each step. We report the domain-agnostic accuracy on
+D2 and D3, and their average, after the full $\mathcal{D}_1\!\rightarrow\!
+\mathcal{D}_2\!\rightarrow\!\mathcal{D}_3$ sequence.
 
-\section{REFERENCES}
-\label{sec:ref}
+\subsection{Ablation}
+\label{ssec:ablation}
 
-List and number all bibliographical references at the end of the paper. The references should be numbered in order of appearance in the document. When referring to them in the text, type the corresponding reference number in square brackets as shown at the end of this sentence \cite{cJones2003}, \cite{aSmith2000}. For \LaTeX\ users, the use of the Bib\TeX\ style file IEEEtran.bst is recommended, which is included in the \LaTeX\ paper kit available from the DCASE 2026 website \cite{dcase2026web}.
+Table~\ref{tab:ablation} adds one component at a time. Residual adapters give
+the largest single jump (+13.7 average over the BN baseline), confirming that
+per-domain capacity, not the classifier, is the bottleneck. The per-domain
+head and the contrastive loss mainly help D2, while the asymmetric depth and
+longer training are what move the harder D3 domain (from $55.1\%$ to
+$60.8\%$). The submitted system reaches $68.5\%$ average, an $18.5$~percentage
+point improvement over the reproduced baseline, while preserving D1 exactly.
 
-\section{ACKNOWLEDGMENT}
-\label{sec:ack}
+\begin{table}[t]
+  \centering
+  \caption{Domain-agnostic accuracy ($\%$) on the development set, adding one
+           component at a time. The last row is the submitted system.}
+  \label{tab:ablation}
+  \begin{tabularx}{\columnwidth}{Xccc}
+    \toprule
+    System & D2 & D3 & Avg \\
+    \midrule
+    Per-domain BN (baseline) \cite{mulimani2025dil} & 59.2 & 40.8 & 50.0 \\
+    \;+ residual adapters            & 73.9 & 53.5 & 63.7 \\
+    \;+ per-domain head              & 77.3 & 54.0 & 65.6 \\
+    \;+ supervised contrastive loss  & 77.9 & 55.1 & 66.5 \\
+    \;+ asymmetric depth (1,\,3)     & 77.2 & 57.7 & 67.4 \\
+    \;+ longer training (180 ep.)    & \textbf{76.2} & \textbf{60.8} & \textbf{68.5} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
-The preferred spelling of the word acknowledgment in America is without an ``e'' after the ``g.'' Try to avoid the stilted expression, ``One of us (R. B. G.) thanks ...'' Instead, try ``R.B.G.\ thanks ...''  Put sponsor acknowledgments in the unnumbered footnote on the first page.
+\subsection{Discussion: frozen backbone vs.\ partial unfreezing}
+\label{ssec:discussion}
+
+We also explored unfreezing the top convolutional blocks of the shared
+backbone for the later domains. Unfreezing two blocks during D3 training
+pushed D3 as high as $66.4\%$, but because the backbone is shared, this
+degraded D2 to $58.5\%$ (D2's BN and adapters were tuned for the original
+features). Constraining the drift with an $\ell_2$ penalty toward the
+previous checkpoint recovered D2 but suppressed the D3 gain, tracing out a
+stability--plasticity trade-off that never beat the fully-frozen adapter
+system on average. We therefore keep the backbone frozen and rely on
+per-domain adapters, which add plasticity \emph{without} any cross-domain
+interference.
+
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented a forgetting-free extension of the DCASE 2026 Task~7 baseline
+that increases per-domain capacity through zero-initialised residual
+adapters, with an asymmetric depth that gives the harder domain more
+capacity, a warm-started per-domain classifier, and a supervised contrastive
+loss. The system raises the domain-agnostic development-set average from
+$50.0\%$ to $68.5\%$ while reproducing $\mathcal{D}_1$ exactly and keeping
+the domains independent. Closing the remaining gap on the hardest domain,
+ideally without the cross-domain interference seen when unfreezing the shared
+backbone, is left for future work.
+
 
 % -------------------------------------------------------------------------
-% Either list references using the bibliography style file IEEEtran.bst
 \bibliographystyle{IEEEtran}
 \bibliography{refs}
-%
-% or list them by yourself
-% \begin{thebibliography}{9}
-% 
-% \bibitem{dcase2016web}
-%   \url{http://www.cs.tut.fi/sgn/arg/dcase2016/}.
-%
-% \bibitem{IEEEPDFSpec}
-%   {PDF} specification for {IEEE} {X}plore$^{\textregistered}$,
-%   \url{http://www.ieee.org/portal/cms_docs/pubs/confstandards/pdfs/IEEE-PDF-SpecV401.pdf}.
-%
-% \bibitem{PDFOpenSourceTools}
-%   Creating high resolution {PDF} files for book production with 
-%   open source tools, 
-%   \url{http://www.grassbook.org/neteler/highres_pdf.html}.
-%
-% \bibitem{eWilliams1999}
-% E. Williams, \emph{Fourier Acoustics: Sound Radiation and Nearfield Acoustic
-%   Holography}. London, UK: Academic Press, 1999.
-% 
-% \bibitem{ieeecopyright}
-%   \url{http://www.ieee.org/web/publications/rights/copyrightmain.html}.
-%
-% \bibitem{cJones2003}
-% C. Jones, A. Smith, and E. Roberts, ``A sample paper in conference
-%   proceedings,'' in \emph{Proc. IEEE ICASSP}, vol. II, 2003, pp. 803--806.
-% 
-% \bibitem{aSmith2000}
-% A. Smith, C. Jones, and E. Roberts, ``A sample paper in journals,'' 
-%   \emph{IEEE Trans. Signal Process.}, vol. 62, pp. 291--294, Jan. 2000.
-% 
-% \end{thebibliography}
-
 
 \end{sloppy}
 \end{document}
