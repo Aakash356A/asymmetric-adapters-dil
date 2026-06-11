@@ -485,19 +485,29 @@ class Learner():
         backbone_lr_scale  = getattr(args, 'backbone_lr_scale', 0.1)
         lambda_l2_backbone = getattr(args, 'lambda_l2_backbone', 0.0)
 
+        # Per-task override: "0,2" → {task1: 0, task2: 2}
+        # Allows asymmetric unfreezing, e.g. freeze backbone for D2 but
+        # unfreeze 2 blocks for D3: --unfreeze_blocks_per_task 0,2
+        _per_task_str = getattr(args, 'unfreeze_blocks_per_task', None) or ''
+        _per_task_map = {}
+        if _per_task_str:
+            for _ti, _d in enumerate(int(x) for x in _per_task_str.split(',') if x.strip()):
+                _per_task_map[_ti + 1] = _d
+        effective_unfreeze = _per_task_map.get(self.cur_task, unfreeze_blocks)
+
         _BLOCK_ORDER = ['conv_block6', 'conv_block5', 'conv_block4',
                         'conv_block3', 'conv_block2', 'conv_block1']
-        blocks_to_unfreeze = set(_BLOCK_ORDER[:max(0, unfreeze_blocks)])
+        blocks_to_unfreeze = set(_BLOCK_ORDER[:max(0, effective_unfreeze)])
 
         backbone_params = []
-        if unfreeze_blocks > 0 and self.cur_task > 0:
+        if effective_unfreeze > 0 and self.cur_task > 0:
             for name, param in self.model.named_parameters():
                 block = name.split('.')[0]
                 if (block in blocks_to_unfreeze
                         and ('.conv1.weight' in name or '.conv2.weight' in name)):
                     param.requires_grad_(True)
                     backbone_params.append(param)
-            print(f'  [backbone] unfreezing top {unfreeze_blocks} block(s): '
+            print(f'  [backbone] unfreezing top {effective_unfreeze} block(s) for task {self.cur_task}: '
                   f'{sorted(blocks_to_unfreeze)}  '
                   f'lr={lr * backbone_lr_scale:.2e}  lambda_l2={lambda_l2_backbone}')
 
@@ -634,7 +644,7 @@ class Learner():
 
         # Update backbone reference to the current domain's adapted weights so
         # the NEXT domain regularises toward these (not the original D1 weights).
-        # This implements the chained L2 anchor: D1→D2 anchor, then D2→D3 anchor.
+        # Chained anchor: D1→D2, then D2→D3.  Only update when backbone moved.
         if backbone_params:
             self.backbone_ref = {
                 name: param.clone().detach()
@@ -743,6 +753,112 @@ class Learner():
 
         average_accuracy = np.mean(accuracy_previous).item()
         return average_accuracy
+
+def recal_domain(args):
+    """
+    BN re-calibration pass: after D3 backbone unfreezing shifts the shared
+    conv weights, a domain's per-task BN (and adapters) become stale because
+    they were fit to the OLD backbone features.  This mode loads the FINAL
+    checkpoint (checkpoint_D3.pth), freezes everything, then runs a short
+    training pass that ONLY updates the specified domain's per-task params
+    (BN + adapters + clf head) so they recalibrate to the new backbone.
+
+    Typical workflow:
+      1. Train with --unfreeze_blocks_per_task 0,2 (D3 only, no_l2)
+         → D3 reaches ~66% but D2 drops to ~58%
+      2. Run recal to re-adapt D2's BN/adapters to the updated backbone
+         → D2 should recover toward 73-77% while D3 stays high
+
+    Usage:
+        python baseline_DIL_task7.py recal \
+            --model_type bn_res_deep_clf --adapter_depths 1,3 \
+            --checkpoint_dir /path/to/unfreeze_run \
+            --recal_task 1 --recal_epochs 40 \
+            --learning_rate 5e-4 --batch_size 32 \
+            --cuda --num_workers 4
+    """
+    device      = 'cuda' if (args.cuda and torch.cuda.is_available()) else 'cpu'
+    classes_num = config.classes_num_DIL
+    num_tasks   = 3
+    recal_task  = args.recal_task   # 1 = D2, 2 = D3
+
+    if args.checkpoint_dir:
+        config.save_resume_path = args.checkpoint_dir
+
+    if getattr(args, 'adapter_depths', None):
+        depth_list = [int(d) for d in args.adapter_depths.split(',') if d.strip()]
+        set_adapter_depths({t + 1: depth_list[t] for t in range(len(depth_list))})
+
+    # Build model and load the FINAL checkpoint (after all domains trained)
+    learner = Learner(sample_rate, window_size, hop_size, mel_bins, fmin, fmax,
+                      classes_num, num_tasks, model_type=args.model_type)
+    learner.cur_task = 2  # points load_checkpoint to checkpoint_D3.pth
+    learner.load_checkpoint(device)
+    learner.model.to(device)
+
+    # Data for the domain being recalibrated
+    dil_domain_map = {1: ['D2'], 2: ['D3']}
+    domain = dil_domain_map[recal_task]
+    train_df = config.df_DIL_dev_train[config.df_DIL_dev_train['domain'].isin(domain)]
+    val_df   = config.df_DIL_dev_test[config.df_DIL_dev_test['domain'].isin(domain)]
+
+    dataset_train = DILDataset(train_df, config.audio_folder_DIL, training=True)
+    train_loader  = torch.utils.data.DataLoader(
+        dataset_train, batch_size=args.batch_size, shuffle=True,
+        num_workers=args.num_workers, pin_memory=(device == 'cuda'))
+
+    # Freeze everything, then unfreeze only the target domain's per-task params
+    # (BN + adapters + clf head) — the backbone stays as-is
+    learner.cur_task = recal_task
+    if hasattr(learner.model, 'set_task_trainable'):
+        learner.model.set_task_trainable(recal_task)
+    else:
+        learner.model.freeze_weight()
+
+    trainable = [p for p in learner.model.parameters() if p.requires_grad]
+    n_params  = sum(p.numel() for p in trainable)
+    print(f'  [recal] domain D{recal_task + 1}  trainable: {n_params:,} params')
+    print(f'  [recal] epochs: {args.recal_epochs}  lr: {args.learning_rate}')
+
+    criteria  = nn.CrossEntropyLoss(ignore_index=-1)
+    optimizer = torch.optim.Adam(
+        trainable, lr=args.learning_rate,
+        betas=(0.9, 0.999), eps=1e-8, weight_decay=0., amsgrad=True)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.recal_epochs, eta_min=1e-7)
+
+    best_loss = float('inf')
+    for epoch in range(1, args.recal_epochs + 1):
+        learner.model.train()
+        sum_loss = 0
+        for audio, target, _ in train_loader:
+            optimizer.zero_grad()
+            audio  = audio.float().to(device)
+            target = target.float().to(device)
+            target_idx = torch.argmax(target, dim=-1)
+            logits = learner.model(audio, recal_task)
+            loss   = criteria(logits, target_idx)
+            loss.backward()
+            optimizer.step()
+            sum_loss += loss.item()
+        scheduler.step()
+        avg = sum_loss / len(train_loader)
+        if avg < best_loss:
+            best_loss = avg
+            save_path = os.path.join(config.save_resume_path,
+                                     f'checkpoint_D{recal_task + 1}.pth')
+            torch.save(learner.model.state_dict(), save_path)
+        if epoch % 10 == 0 or epoch == args.recal_epochs:
+            print(f'  [recal] epoch {epoch}/{args.recal_epochs}  loss={avg:.4f}')
+
+    print(f'  [recal] done. Evaluating both domains...')
+    seen_domains = [['D2'], ['D3']]
+    avg_acc = learner.acc_prev(
+        seen_domains, config.df_DIL_dev_train, config.df_DIL_dev_test,
+        args.batch_size, args.num_workers, device,
+        tta_n=getattr(args, 'tta_n', 1))
+    print(f'Average Accuracy:  {avg_acc}')
+
 
 def eval_ensemble(args):
     """
@@ -964,16 +1080,19 @@ if __name__ == '__main__':
                               help='Test-time augmentation: number of temporal shifts to average '
                                    '(1 = off, 4–8 is a good range)')
     parser_train.add_argument('--unfreeze_blocks', type=int, default=0,
-                              help='Unfreeze the top N conv blocks of the shared backbone for D2/D3. '
-                                   '0=fully frozen (default); 1=block6 only; 2=blocks 5+6; '
-                                   '3=blocks 4+5+6. Backbone updates use --backbone_lr_scale.')
+                              help='Unfreeze the top N conv blocks for ALL domains (D2/D3). '
+                                   '0=frozen; 1=block6; 2=blocks5+6; 3=blocks4-6. '
+                                   'Overridden per-task by --unfreeze_blocks_per_task.')
+    parser_train.add_argument('--unfreeze_blocks_per_task', type=str, default=None,
+                              help='Per-task unfreeze depths, comma-sep (D2,D3,...). '
+                                   'E.g. "0,2" keeps D2 frozen and unfreezes 2 blocks for D3. '
+                                   'Overrides --unfreeze_blocks for specified tasks.')
     parser_train.add_argument('--backbone_lr_scale', type=float, default=0.1,
-                              help='LR multiplier for unfrozen backbone params relative to '
-                                   'adapter/BN lr. E.g. 0.05 means backbone trains at lr/20.')
+                              help='LR multiplier for unfrozen backbone params. '
+                                   'E.g. 0.05 → backbone lr = lr × 0.05.')
     parser_train.add_argument('--lambda_l2_backbone', type=float, default=0.0,
-                              help='L2 penalty weight toward previous-domain backbone weights. '
-                                   'Prevents shared conv weights from forgetting earlier domains. '
-                                   'Try 1e-3 to 1e-2.')
+                              help='L2 penalty toward previous-domain backbone weights. '
+                                   'Try 1e-4 to 1e-2.')
     parser_train.add_argument('--lambda_lwf', type=float, default=0.0,
                               help='Weight for Learning without Forgetting (LwF) KD loss. '
                                    'Regularises old-task *outputs* (better than L2 weight '
@@ -1000,6 +1119,24 @@ if __name__ == '__main__':
     parser_ensemble.add_argument('--cuda', action='store_true', default=False)
     parser_ensemble.add_argument('--num_workers', type=int, default=4)
 
+    # BN re-calibration
+    parser_recal = subparsers.add_parser('recal',
+        help='Re-adapt a domain BN/adapters to a backbone that has shifted from unfreezing')
+    parser_recal.add_argument('--model_type', type=str, required=True,
+                              help='Model type (must match the checkpoint being loaded)')
+    parser_recal.add_argument('--checkpoint_dir', type=str, required=True,
+                              help='Dir containing checkpoint_D3.pth to load from')
+    parser_recal.add_argument('--recal_task', type=int, required=True,
+                              help='Which domain to recalibrate: 1=D2, 2=D3')
+    parser_recal.add_argument('--recal_epochs', type=int, default=40,
+                              help='Number of epochs for the recal pass')
+    parser_recal.add_argument('--learning_rate', type=float, default=5e-4)
+    parser_recal.add_argument('--batch_size', type=int, default=32)
+    parser_recal.add_argument('--adapter_depths', type=str, default=None)
+    parser_recal.add_argument('--tta_n', type=int, default=1)
+    parser_recal.add_argument('--cuda', action='store_true', default=False)
+    parser_recal.add_argument('--num_workers', type=int, default=4)
+
     # Parse arguments
     args = parser.parse_args()
     args.filename = get_filename(__file__)
@@ -1009,6 +1146,9 @@ if __name__ == '__main__':
 
     elif args.mode == 'ensemble_eval':
         eval_ensemble(args)
+
+    elif args.mode == 'recal':
+        recal_domain(args)
 
     else:
         raise Exception('Error argument!')

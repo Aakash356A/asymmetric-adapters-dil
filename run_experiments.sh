@@ -571,4 +571,197 @@ _flush_jobs
 # _backbone_run "unfreeze2_bb0.05_no_l2"   2  0.05  0.0
 # _backbone_run "unfreeze2_bb0.05_l2_1e2"  2  0.05  1e-2
 
+# =====================================================================
+# Shared helper for new backbone runs (supports --unfreeze_blocks_per_task)
+# Usage: _bbrun <tag> <blocks> <bb_lr> <l2> [per_task_str]
+# =====================================================================
+_bbrun() {
+    local tag=$1 blocks=$2 bb_lr=$3 l2=$4 per_task="${5:-}"
+    local name="BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_${tag}"
+    local ckpt_dir="$BASE_DIR/checkpoints/$name"
+    mkdir -p "$ckpt_dir"
+    cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
+    local pt_flag=""
+    [ -n "$per_task" ] && pt_flag="--unfreeze_blocks_per_task=$per_task"
+    echo "  [+] $name  blocks=$blocks  bb_lr=$bb_lr  l2=$l2  per_task=${per_task:-symmetric}"
+    python3 "$SCRIPT" train \
+        --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
+        --num_workers=$PAR_WORKERS --epoch=120 \
+        --model_type=bn_res_deep_clf --checkpoint_dir="$ckpt_dir" \
+        --adapter_depths=1,3 --lambda_con=0.2 --con_temp=0.07 \
+        --unfreeze_blocks="$blocks" $pt_flag \
+        --backbone_lr_scale="$bb_lr" \
+        --lambda_l2_backbone="$l2" \
+        --save > "$ckpt_dir/train.log" 2>&1
+    local py_exit=$?
+    local d2 d3 avg ts
+    d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
+    printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
+        "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
+    echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}% | log: $ckpt_dir/train.log"
+}
+
+# =====================================================================
+# BATCH 15 — Asymmetric backbone unfreeze (D3-only, D2 stays frozen)
+#
+# Key insight: D3 can hit 66% when backbone is free, but D2 crashes.
+# Fix: keep backbone frozen during D2 training, only unfreeze for D3.
+# D2 trains exactly as before → D2 stays ~77%.
+# D3 then adapts the backbone → D3 should reach 62-65%.
+# L2 anchor toward D2-checkpoint weights prevents D2 routing from
+# degrading at eval time (backbone not too far from D1/D2 features).
+#
+# --unfreeze_blocks_per_task "0,2" → D2=0 blocks, D3=2 blocks
+# --unfreeze_blocks_per_task "0,3" → D2=0 blocks, D3=3 blocks
+# =====================================================================
+echo ""
+echo "--- Batch 15: asymmetric D3-only backbone unfreeze ---"
+_bbrun "asym_d3only_ub2_no_l2"       2  0.05  0.0   "0,2"  &  pid1=$!
+_bbrun "asym_d3only_ub2_l2_1e4"      2  0.05  1e-4  "0,2"  &  pid2=$!
+wait "$pid1" "$pid2"
+
+_bbrun "asym_d3only_ub2_l2_5e4"      2  0.05  5e-4  "0,2"  &  pid3=$!
+_bbrun "asym_d3only_ub3_l2_1e4"      3  0.05  1e-4  "0,3"  &  pid4=$!
+wait "$pid3" "$pid4"
+
+# =====================================================================
+# BATCH 16 — Fine lambda sweep on symmetric unfreeze2
+#
+# Known: lambda=0 → D3=66% D2=58%; lambda=1e-3 → D3=55% D2=73%.
+# The sweet spot is somewhere between 1e-4 and 7e-4.
+# Each pair run in parallel (2 jobs at a time).
+# =====================================================================
+echo ""
+echo "--- Batch 16: fine lambda sweep on unfreeze2 ---"
+_bbrun "unfreeze2_l2_1e4"  2  0.05  1e-4  ""  &  pid5=$!
+_bbrun "unfreeze2_l2_3e4"  2  0.05  3e-4  ""  &  pid6=$!
+wait "$pid5" "$pid6"
+
+_bbrun "unfreeze2_l2_5e4"  2  0.05  5e-4  ""  &  pid7=$!
+_bbrun "unfreeze2_l2_7e4"  2  0.05  7e-4  ""  &  pid8=$!
+wait "$pid7" "$pid8"
+
+# =====================================================================
+# BATCH 17 — Extended training (240 epochs)
+#
+# 120→180 ep already gave D3: 57.69%→60.79% (+3.1%).
+# 180→240 should give another ~1-2%.
+# Run on the two most promising recipes in parallel.
+# =====================================================================
+echo ""
+echo "--- Batch 17: 240-epoch training ---"
+
+_ep240_run() {
+    local model=$1 tag=$2 depths="${3:-}" lcon="${4:-0.2}"
+    local name="${model^^}_lr1e-3_bs32_ep240_${tag}"
+    local ckpt_dir="$BASE_DIR/checkpoints/$name"
+    mkdir -p "$ckpt_dir"
+    cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
+    local depth_flag=""; [ -n "$depths" ] && depth_flag="--adapter_depths=$depths"
+    echo "  [+] $name"
+    python3 "$SCRIPT" train \
+        --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
+        --num_workers=$PAR_WORKERS --epoch=240 \
+        --model_type="$model" --checkpoint_dir="$ckpt_dir" \
+        --lambda_con="$lcon" --con_temp=0.07 \
+        $depth_flag --save > "$ckpt_dir/train.log" 2>&1
+    local py_exit=$?
+    local d2 d3 avg ts
+    d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
+    printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
+        "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
+    echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%"
+}
+
+# Best combined recipe (deep_clf depths=1,3 + supcon=0.2) — ep180 gave D3=60.79%
+_ep240_run bn_res_deep_clf  deep_clf_d3_sup02  1,3  0.2  &  pid9=$!
+# Best D2 recipe (bn_res_clf + supcon=0.2) — ep180 gave D2=77.93%
+_ep240_run bn_res_clf       clf_sup02          ""   0.2  &  pid10=$!
+wait "$pid9" "$pid10"
+
+# 240 epochs + unfreeze2 + lambda=5e-4 (combine batch 16 sweet-spot with more training)
+_bbrun_ep240() {
+    local tag=$1 blocks=$2 bb_lr=$3 l2=$4 per_task="${5:-}"
+    local name="BN_RES_DEEP_CLF_lr1e-3_bs32_ep240_${tag}"
+    local ckpt_dir="$BASE_DIR/checkpoints/$name"
+    mkdir -p "$ckpt_dir"
+    cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
+    local pt_flag=""; [ -n "$per_task" ] && pt_flag="--unfreeze_blocks_per_task=$per_task"
+    echo "  [+] $name  blocks=$blocks  l2=$l2"
+    python3 "$SCRIPT" train \
+        --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
+        --num_workers=$PAR_WORKERS --epoch=240 \
+        --model_type=bn_res_deep_clf --checkpoint_dir="$ckpt_dir" \
+        --adapter_depths=1,3 --lambda_con=0.2 --con_temp=0.07 \
+        --unfreeze_blocks="$blocks" $pt_flag \
+        --backbone_lr_scale="$bb_lr" --lambda_l2_backbone="$l2" \
+        --save > "$ckpt_dir/train.log" 2>&1
+    local py_exit=$?
+    local d2 d3 avg ts
+    d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+    avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
+    ts=$(date '+%Y-%m-%d %H:%M:%S')
+    local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
+    printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
+        "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
+    echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%"
+}
+
+_bbrun_ep240 "unfreeze2_l2_5e4_ep240"     2  0.05  5e-4  ""   &  pid11=$!
+_bbrun_ep240 "asym_d3only_ub2_l2_1e4_ep240"  2  0.05  1e-4  "0,2"  &  pid12=$!
+wait "$pid11" "$pid12"
+
+# =====================================================================
+# BATCH 18 — BN re-calibration after D3 backbone unfreeze
+#
+# Step 1 (asym_d3only_ub2_no_l2 from Batch 15) gives D3=~66%, D2=~58%.
+# Step 2 (this batch): reload that checkpoint, re-adapt D2's BN/adapters
+#         to the updated backbone for 40 epochs → D2 should recover.
+#
+# Run AFTER Batch 15 completes. Fill in the checkpoint dir from B15.
+# =====================================================================
+ASYM_NO_L2="$BASE_DIR/checkpoints/BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_no_l2"
+
+echo ""
+echo "--- Batch 18: BN recal — re-adapt D2 after D3 backbone unfreeze ---"
+
+# Recal D2 (task=1) at lr=5e-4 for 40 epochs
+python3 "$SCRIPT" recal \
+    --model_type=bn_res_deep_clf \
+    --adapter_depths=1,3 \
+    --checkpoint_dir="$ASYM_NO_L2" \
+    --recal_task=1 \
+    --recal_epochs=40 \
+    --learning_rate=5e-4 \
+    --batch_size=32 \
+    --cuda --num_workers=$SER_WORKERS
+
+# Log recal result (acc is printed to stdout by recal_domain)
+d2=$(grep "seen domain: \['D2'\]" "$ASYM_NO_L2/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+d3=$(grep "seen domain: \['D3'\]" "$ASYM_NO_L2/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+ts=$(date '+%Y-%m-%d %H:%M:%S')
+printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | DONE\n' \
+    "$ts" "BN_RES_DEEP_CLF_asym_d3only_ub2_no_l2_recal_d2_ep40" \
+    "${d2:--}%" "${d3:--}%" "-%" >> "$RESULTS_LOG"
+
+# Also try recal at lr=1e-4 (more conservative) in the same checkpoint dir
+python3 "$SCRIPT" recal \
+    --model_type=bn_res_deep_clf \
+    --adapter_depths=1,3 \
+    --checkpoint_dir="$ASYM_NO_L2" \
+    --recal_task=1 \
+    --recal_epochs=40 \
+    --learning_rate=1e-4 \
+    --batch_size=32 \
+    --cuda --num_workers=$SER_WORKERS
+
 
