@@ -431,41 +431,41 @@ _flush_jobs
 # to confirm that LwF with no unfrozen params gives no gain (ablation).
 # =====================================================================
 
-echo ""
-echo "--- Batch 15: LwF + partial backbone unfreezing ---"
+# echo ""
+# echo "--- Batch 15: LwF + partial backbone unfreezing ---"
 
-_lwf_run() {
-    local tag=$1 lwf=$2 bb_lr=$3 blocks=$4
-    local name="BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_${tag}"
-    local ckpt_dir="$BASE_DIR/checkpoints/$name"
-    mkdir -p "$ckpt_dir"
-    cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
-    echo "  [+] $name  lambda_lwf=$lwf  bb_lr=$bb_lr  unfreeze_blocks=$blocks"
-    python3 "$SCRIPT" train \
-        --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
-        --num_workers=$PAR_WORKERS --epoch=120 \
-        --model_type=bn_res_deep_clf --checkpoint_dir="$ckpt_dir" \
-        --adapter_depths=1,3 --lambda_con=0.2 --con_temp=0.07 \
-        --lambda_lwf="$lwf" --lwf_temp=2.0 \
-        --unfreeze_blocks="$blocks" --backbone_lr_scale="$bb_lr" \
-        --save > "$ckpt_dir/train.log" 2>&1
-    local py_exit=$?
-    local d2 d3 avg ts
-    d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
-    d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
-    avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
-    ts=$(date '+%Y-%m-%d %H:%M:%S')
-    local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
-    printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
-        "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
-    echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%  log: $ckpt_dir/train.log"
-}
+# _lwf_run() {
+#     local tag=$1 lwf=$2 bb_lr=$3 blocks=$4
+#     local name="BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_${tag}"
+#     local ckpt_dir="$BASE_DIR/checkpoints/$name"
+#     mkdir -p "$ckpt_dir"
+#     cp "$D1_CKPT" "$ckpt_dir/checkpoint_D1.pth"
+#     echo "  [+] $name  lambda_lwf=$lwf  bb_lr=$bb_lr  unfreeze_blocks=$blocks"
+#     python3 "$SCRIPT" train \
+#         --augmentation=none --learning_rate=1e-3 --batch_size=32 --cuda \
+#         --num_workers=$PAR_WORKERS --epoch=120 \
+#         --model_type=bn_res_deep_clf --checkpoint_dir="$ckpt_dir" \
+#         --adapter_depths=1,3 --lambda_con=0.2 --con_temp=0.07 \
+#         --lambda_lwf="$lwf" --lwf_temp=2.0 \
+#         --unfreeze_blocks="$blocks" --backbone_lr_scale="$bb_lr" \
+#         --save > "$ckpt_dir/train.log" 2>&1
+#     local py_exit=$?
+#     local d2 d3 avg ts
+#     d2=$(grep "seen domain: \['D2'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+#     d3=$(grep "seen domain: \['D3'\]" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk -F': ' '{print $NF}' | tr -d ' \r\n')
+#     avg=$(grep "Average Accuracy:" "$ckpt_dir/train.log" 2>/dev/null | tail -1 | awk '{print $NF}' | tr -d ' \r\n')
+#     ts=$(date '+%Y-%m-%d %H:%M:%S')
+#     local status="DONE"; [ "$py_exit" -ne 0 ] && status="FAILED(exit=$py_exit)"
+#     printf '%s | %-55s | D2=%-6s | D3=%-6s | Avg=%-6s | %s\n' \
+#         "$ts" "$name" "${d2:--}%" "${d3:--}%" "${avg:--}%" "$status" >> "$RESULTS_LOG"
+#     echo "  [$status] $name | D2=${d2:--}% D3=${d3:--}%  log: $ckpt_dir/train.log"
+# }
 
-# Run sequentially to avoid GPU OOM (backbone unfreezing increases VRAM)
-# tag                           lwf   bb_lr  blocks
-_lwf_run lwf_bb2_l1.0_sup02    1.0   0.05   2
-_lwf_run lwf_bb2_l0.5_sup02    0.5   0.05   2
-_lwf_run lwf_bb2_l2.0_sup02    2.0   0.05   2
+# # Run sequentially to avoid GPU OOM (backbone unfreezing increases VRAM)
+# # tag                           lwf   bb_lr  blocks
+# _lwf_run lwf_bb2_l1.0_sup02    1.0   0.05   2
+# _lwf_run lwf_bb2_l0.5_sup02    0.5   0.05   2
+# _lwf_run lwf_bb2_l2.0_sup02    2.0   0.05   2
 #
 # The cosine LR schedule already decays to 1e-7; giving it more epochs
 # lets it descend further without changing any other hyperparameter.
