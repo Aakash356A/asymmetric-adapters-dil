@@ -17,9 +17,9 @@ ref = 1.0
 amin = 1e-10
 top_db = None
 classes_num_DIL = 10
-save_resume_path = '/home/aakash/dcase_task7/checkpoints/BN_SE_lr1e-3_bs32_ep120_se_adapters/'
-audio_folder_DIL = '/home/aakash/dcase_task7/task7_data/'
-output_folder = '/home/aakash/dcase_task7/task7_data/results/'
+save_resume_path = '/home/aakashd/dcase_task7/checkpoints/BN_SE_lr1e-3_bs32_ep120_se_adapters/'
+audio_folder_DIL = '/home/aakashd/dcase_task7/task7_data/'
+output_folder = '/home/aakashd/dcase_task7/task7_data/results/'
 
 
 df_DIL_dev_train = pd.read_csv(os.path.join(audio_folder_DIL + 'evaluation_setup/' +'development_train.txt'), sep='\t', names=['filename', 'target', 'domain', 'new_target'])
