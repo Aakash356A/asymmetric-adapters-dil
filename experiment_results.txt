@@ -73,3 +73,13 @@ Average Accuracy:  66.87
 2026-06-10 10:55:03 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_d3_sup02 | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
 2026-06-10 17:05:52 | BN_RES_CLF_lr1e-3_bs32_ep180_clf_sup02_ep180  | D2=77.93% | D3=55.96% | Avg=66.94500000000001% | DONE
 2026-06-10 18:35:07 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep180_deep_clf_d3_ep180 | D2=76.21% | D3=60.79% | Avg=68.5%  | DONE
+2026-06-11 01:15:45 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_l2_1e4 | D2=80.91% | D3=-%     | Avg=80.91% | FAILED(exit=1)
+2026-06-11 02:08:45 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_no_l2 | D2=61.5%  | D3=62.28% | Avg=61.89% | DONE
+2026-06-11 03:04:33 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub3_l2_1e4 | D2=77.62% | D3=-%     | Avg=77.62% | FAILED(exit=1)
+2026-06-11 04:03:15 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_l2_5e4 | D2=71.05% | D3=57.07% | Avg=64.06% | DONE
+2026-06-11 04:03:21 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_l2_3e4      | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
+2026-06-11 04:03:21 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_l2_1e4      | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
+2026-06-11 04:03:27 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_l2_5e4      | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
+2026-06-11 04:03:27 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_l2_7e4      | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
+2026-06-11 09:30:52 | BN_RES_CLF_lr1e-3_bs32_ep240_clf_sup02                  | D2=78.72% | D3=-%     | Avg=78.72% | FAILED(exit=1)
+2026-06-11 09:30:52 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep240_deep_clf_d3_sup02     | D2=78.25% | D3=-%     | Avg=78.25% | FAILED(exit=1)

@@ -993,7 +993,7 @@ def train(args):
         auto_name = '{}_lr{}_bs{}_ep{}'.format(
             args.model_type.upper(), args.learning_rate, args.batch_size, args.epoch)
         config.save_resume_path = os.path.join(
-            '/home/aakashd/dcase_task7/checkpoints', auto_name)
+            '/home/aakash/dcase_task7/checkpoints', auto_name)
 
     # Per-task adapter depths for bn_res_deep (e.g. "1,3" -> D2=1, D3=3).
     if getattr(args, 'adapter_depths', None):
