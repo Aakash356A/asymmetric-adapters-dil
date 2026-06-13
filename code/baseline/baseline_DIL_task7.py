@@ -397,8 +397,11 @@ def _compute_uncertainity(model, loader, seen_domains, device, tta_n=1):
         output_dict[key] = np.concatenate(output_dict[key], axis=0)
     cm = metrics.confusion_matrix(np.argmax(output_dict['target'], axis=-1), np.argmax(output_dict['clipwise_output'], axis=-1), labels=None)
     class_acc = cm.diagonal() / cm.sum(axis=1)
-    #print('confusion matrix:', cm)
-    #print('class-wise accuracy', class_acc)
+    class_names = list(config.dict_class_labels.keys())
+    # Only print classes that appear in this domain's test set (cm rows with data)
+    active = [i for i in range(len(class_acc)) if cm.sum(axis=1)[i] > 0]
+    for i in active:
+        print(f'    {class_names[i]}: {np.around(class_acc[i] * 100, decimals=1)}%')
     return np.around(tensor2numpy(correct) * 100 / total, decimals=2)
 
 
