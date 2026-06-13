@@ -148,13 +148,29 @@ def load_checkpoint(model, checkpoint_dir: str, device: str):
             f'Make sure the model was trained on all three domains (D1/D2/D3).'
         )
     state = torch.load(ckpt_path, map_location=device)
-    incompatible = model.load_state_dict(state, strict=False)
-    if incompatible.missing_keys:
-        print(f'  [checkpoint] {len(incompatible.missing_keys)} missing keys '
-              f'(will use init values)')
-    if incompatible.unexpected_keys:
-        print(f'  [checkpoint] {len(incompatible.unexpected_keys)} unexpected keys '
-              f'(ignored)')
+    try:
+        model.load_state_dict(state, strict=True)
+    except RuntimeError as e:
+        # Print the full mismatch details and abort — do not silently ignore keys.
+        print('\n[ERROR] Checkpoint does not match the model architecture.')
+        print('  This usually means --model_type or --adapter_depths is wrong.')
+        print(f'  Checkpoint : {ckpt_path}')
+        print(f'  Model keys : {len(model.state_dict())}')
+        print(f'  Ckpt  keys : {len(state)}')
+        # Show missing and unexpected keys explicitly
+        model_keys = set(model.state_dict().keys())
+        ckpt_keys  = set(state.keys())
+        missing    = sorted(model_keys - ckpt_keys)
+        unexpected = sorted(ckpt_keys - model_keys)
+        if missing:
+            print(f'\n  Missing keys ({len(missing)}) — in model but not in checkpoint:')
+            for k in missing:
+                print(f'    {k}')
+        if unexpected:
+            print(f'\n  Unexpected keys ({len(unexpected)}) — in checkpoint but not in model:')
+            for k in unexpected:
+                print(f'    {k}')
+        raise SystemExit(1) from None
     print(f'Loaded checkpoint from {ckpt_path}')
 
 
