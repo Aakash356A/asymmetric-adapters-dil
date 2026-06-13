@@ -5,7 +5,7 @@ task7_data/
 # Model weights / checkpoints
 checkpoints/
 pretrained_models/
-submission/AAA/checkpoint/
+submission/Divakar_IND_task7_1/checkpoint/
 
 # Task spec PDF
 dcase_2026_task7.pdf

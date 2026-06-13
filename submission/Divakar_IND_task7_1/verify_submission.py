@@ -25,7 +25,7 @@ import torch
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import ResAdapt as M  # the standalone submitted model
+import submission.AAA.Divakar_IND_task7_1 as M  # the standalone submitted model
 
 NB_TASKS = 3
 CKPT_DIR = os.path.join(HERE, "checkpoint")

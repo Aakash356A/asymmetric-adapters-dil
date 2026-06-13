@@ -340,7 +340,7 @@ def _compute_accuracy(model, loader, task, device, tta_n=1):
         output_dict[key] = np.concatenate(output_dict[key], axis=0)
     cm = metrics.confusion_matrix(np.argmax(output_dict['target'], axis=-1), np.argmax(output_dict['clipwise_output'], axis=-1), labels=None)
     class_acc = cm.diagonal() / cm.sum(axis=1)
-    #print(class_acc)
+    print(f"  per-class accuracy: {np.around(class_acc * 100, decimals=2)}")
     return np.around(tensor2numpy(correct) * 100 / total, decimals=2)
 
 

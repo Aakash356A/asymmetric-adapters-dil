@@ -2,7 +2,7 @@
 submission:
   # Submission label
   # [Last name of corresponding author]_[Abbreviation of institute]_task[number]_[index 1-4]
-  label: Divakar_XXX_task7_1
+  label: Divakar_IND_task7_1
 
   # Submission name
   name: Per-domain residual adapters with asymmetric depth for DIL
