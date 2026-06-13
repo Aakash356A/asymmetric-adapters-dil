@@ -20,19 +20,14 @@
 \title{PER-DOMAIN RESIDUAL ADAPTERS WITH ASYMMETRIC DEPTH FOR\\
 DOMAIN-INCREMENTAL AUDIO CLASSIFICATION}
 
-% NOTE: author block below uses the baseline authors as placeholders.
-% Replace with the correct author names / affiliations before submission.
-\twoauthors
-  {Manjunath Mulimani$^{1}$, Riccardo Casciotti$^{2}$}
-    {$^{1}$ Aalborg University\\
-     Department of Electronic Systems\\
-     Aalborg, Denmark \\
-     manjunathm@es.aau.dk}
-  {Manu Harju$^{2}$, Annamaria Mesaros$^{2}$}
-    {$^{2}$ Tampere University \\
-     Signal Processing Research Centre \\
-     Tampere, Finland \\
-     annamaria.mesaros@tuni.fi}
+% Authors at a common affiliation.
+% TODO: replace INSTITUTION / department / location below with your affiliation.
+\name{Aakash Divakar, Atharva Joshi, Angad Bajwa \thanks{The three authors
+contributed equally to this work.}}
+\address{INSTITUTION \\
+         Department / Research Group \\
+         City, Country \\
+         \{aakashdivakar.4869, atharvajoshi253, angadisthere\}@gmail.com}
 
 \begin{document}
 
@@ -237,19 +232,91 @@ point improvement over the reproduced baseline, while preserving D1 exactly.
   \end{tabularx}
 \end{table}
 
-\subsection{Discussion: frozen backbone vs.\ partial unfreezing}
+\subsection{Choosing the adapter}
+\label{ssec:adapter_choice}
+
+Before settling on residual bottleneck adapters we compared three per-domain
+adapter families inserted at the same six locations, each trained under the
+identical protocol (Table~\ref{tab:adapter}). Feature-wise linear modulation
+(FiLM), which only scales and shifts each channel, actually performed
+\emph{below} the BN baseline: a per-channel affine transform is too weak to
+absorb the distribution shift. Squeeze-and-excitation (SE) channel gating
+helped ($57.7\%$), but stacking more SE blocks did not. The residual
+bottleneck, which can mix channels through its $1\times1$ convolutions, was
+clearly the strongest ($63.7\%$) and is the one we keep. The gap is largest
+on the harder D3 domain ($38.8\rightarrow53.5\%$), confirming that the
+bottleneck's extra capacity is what the difficult domain needs.
+
+\begin{table}[t]
+  \centering
+  \caption{Per-domain adapter family, same backbone and protocol
+           (residual bottleneck selected).}
+  \label{tab:adapter}
+  \begin{tabularx}{\columnwidth}{Xccc}
+    \toprule
+    Adapter family & D2 & D3 & Avg \\
+    \midrule
+    FiLM (affine per channel)        & 56.7 & 38.8 & 47.7 \\
+    Squeeze-and-excitation           & 70.3 & 45.0 & 57.7 \\
+    Squeeze-and-excitation (deeper)  & 69.2 & 41.8 & 55.5 \\
+    Residual bottleneck (\emph{ours}) & \textbf{73.9} & \textbf{53.5} & \textbf{63.7} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{What helped and what did not}
+\label{ssec:choices}
+
+\noindent\textbf{Asymmetric beats symmetric depth.} Giving \emph{both} domains
+depth-2 stacks scored $65.1\%$, whereas the asymmetric $(1,3)$ allocation
+reached $67.4\%$ at a similar parameter budget: the capacity is better spent
+on the domain that actually needs it (D3) than spread evenly.
+
+\noindent\textbf{Contrastive weight.} Sweeping the SupCon weight $\lambda \in
+\{0.1,0.15,0.2,0.25,0.3\}$ peaked at $\lambda=0.2$ ($66.7\%$); larger values
+began to compete with the cross-entropy term and slightly hurt accuracy.
+
+\noindent\textbf{Augmentation did not help.} Time-shift augmentation and
+class-balanced resampling gave no consistent gain and tended to lower D3, so
+the submitted system uses no augmentation. Test-time augmentation and
+checkpoint ensembling were likewise within noise of the single frozen model
+and were dropped to keep the submission simple.
+
+\subsection{Frozen backbone vs.\ partial unfreezing}
 \label{ssec:discussion}
 
-We also explored unfreezing the top convolutional blocks of the shared
-backbone for the later domains. Unfreezing two blocks during D3 training
-pushed D3 as high as $66.4\%$, but because the backbone is shared, this
-degraded D2 to $58.5\%$ (D2's BN and adapters were tuned for the original
-features). Constraining the drift with an $\ell_2$ penalty toward the
-previous checkpoint recovered D2 but suppressed the D3 gain, tracing out a
-stability--plasticity trade-off that never beat the fully-frozen adapter
-system on average. We therefore keep the backbone frozen and rely on
-per-domain adapters, which add plasticity \emph{without} any cross-domain
-interference.
+The most tempting way to gain more D3 accuracy is to unfreeze the top
+convolutional blocks of the shared backbone (Table~\ref{tab:unfreeze}).
+Unfreezing two blocks for D3 \emph{does} push D3 as high as $66.4\%$ --- the
+best D3 number we obtained --- but because the backbone is shared, D2
+collapses to $58.5\%$, since D2's BN and adapters were tuned for the original
+features. Anchoring the drift with an $\ell_2$ penalty toward the previous
+checkpoint recovers D2 but cancels most of the D3 gain, and restricting the
+unfreezing to D3's own forward pass still leaves D2 degraded. Unfreezing three
+blocks destabilises training entirely. Across the whole sweep, \emph{no}
+unfrozen configuration beat the fully-frozen adapter system on average: the
+shared weights couple the domains and trade one against the other. We
+therefore keep the backbone frozen and rely on per-domain adapters, which add
+plasticity \emph{without} any cross-domain interference.
+
+\begin{table}[t]
+  \centering
+  \caption{Partial backbone unfreezing for D3. No configuration beats the
+           frozen adapter system; the shared weights couple D2 and D3.}
+  \label{tab:unfreeze}
+  \begin{tabularx}{\columnwidth}{Xccc}
+    \toprule
+    Configuration & D2 & D3 & Avg \\
+    \midrule
+    Frozen adapters (submitted)        & \textbf{76.2} & 60.8 & \textbf{68.5} \\
+    Unfreeze 2 blk, no anchor          & 58.5 & \textbf{66.4} & 62.5 \\
+    Unfreeze 2 blk, $\ell_2$ anchor    & 75.3 & 57.3 & 66.3 \\
+    Unfreeze 1 blk, $\ell_2$ anchor    & 72.6 & 57.7 & 65.2 \\
+    D3-only unfreeze 2 blk             & 61.5 & 62.3 & 61.9 \\
+    D3-only unfreeze 3 blk             & 46.3 & 54.3 & 50.3 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
 
 \section{Conclusion}
