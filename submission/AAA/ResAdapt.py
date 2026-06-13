@@ -1,5 +1,5 @@
 """
-DCASE 2026 Task 7 — submission Mulimani_AAU_task7_1
+DCASE 2026 Task 7 — submission ResAdapt
 
 Standalone definition of the submitted system:
     Per-domain residual bottleneck adapters with asymmetric depth, a
@@ -15,18 +15,17 @@ Submitted configuration:
     auxiliary loss  : supervised contrastive (training only)
 
 Per-domain weights are provided as separate state dicts:
-    Mulimani_AAU_task7_1_D2_dictionary.pth   (model state after D1->D2)
-    Mulimani_AAU_task7_1_D3_dictionary.pth   (model state after D1->D2->D3)
+    checkpoint/checkpoint_D2.pth   (model state after D1->D2)
+    checkpoint/checkpoint_D3.pth   (model state after D1->D2->D3)
 
 Usage
 -----
-    from Mulimani_AAU_task7_1_model import build_model, ADAPTER_DEPTHS
+    from ResAdapt import build_model, ADAPTER_DEPTHS
 
     model = build_model(nb_tasks=3, adapter_depths=ADAPTER_DEPTHS)
     # final model holding all domains' parameters:
-    state = torch.load("Mulimani_AAU_task7_1_D3_dictionary.pth",
-                       map_location="cpu")
-    model.load_state_dict(state, strict=False)
+    state = torch.load("checkpoint/checkpoint_D3.pth", map_location="cpu")
+    model.load_state_dict(state)   # strict=True: keys match exactly
     model.eval()
 
     # Domain-agnostic (ADIL) inference: forward through every seen domain's
