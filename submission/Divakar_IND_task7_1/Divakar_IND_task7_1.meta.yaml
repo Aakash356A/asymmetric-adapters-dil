@@ -7,22 +7,24 @@ submission:
   # Submission name
   name: Per-domain residual adapters with asymmetric depth for DIL
 
-  # Submission name abbreviated (max 10 characters)
   abbreviation: ResAdapt
 
   # Authors of the submitted system.
   authors:
     - firstname: Aakash
       lastname: Divakar
+      affiliation: Independent Researcher
       email: aakashdivakar.4869@gmail.com
       corresponding: true
 
     - firstname: Atharva 
       lastname: Joshi
+      affiliation: Independent Researcher
       email: atharvajoshi253@gmail.com
 
     - firstname: Angad
       lastname: Bajwa
+      affiliation: Independent Researcher
       email: angadisthere@gmail.com
       
 # System information
