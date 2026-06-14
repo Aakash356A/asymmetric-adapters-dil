@@ -14,10 +14,6 @@ Submitted configuration:
     classifier      : per-domain linear head (warm-started from D1)
     auxiliary loss  : supervised contrastive (training only)
 
-Per-domain weights are provided as separate state dicts:
-    checkpoint/checkpoint_D2.pth   (model state after D1->D2)
-    checkpoint/checkpoint_D3.pth   (model state after D1->D2->D3)
-
 Usage
 -----
     from ResAdapt import build_model, ADAPTER_DEPTHS

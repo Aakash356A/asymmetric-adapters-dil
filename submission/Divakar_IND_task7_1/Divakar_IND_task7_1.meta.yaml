@@ -1,7 +1,6 @@
-# Submission information
 submission:
   # Submission label
-  # [Last name of corresponding author]_[Abbreviation of institute]_task[number]_[index 1-4]
+
   label: Divakar_IND_task7_1
 
   # Submission name
@@ -29,9 +28,7 @@ submission:
       
 # System information
 system:
-  # System description, metadata provided here will be used to do a meta-analysis
-  # of the submitted system. Use general level tags where possible.
-  # If a field is not applicable, use "!!null".
+  
   description:
     input_sampling_rate: 32000
 
