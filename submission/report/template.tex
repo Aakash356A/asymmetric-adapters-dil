@@ -24,9 +24,8 @@ DOMAIN-INCREMENTAL AUDIO CLASSIFICATION}
 % TODO: replace INSTITUTION / department / location below with your affiliation.
 \name{Aakash Divakar, Atharva Joshi, Angad Bajwa \thanks{The three authors
 contributed equally to this work.}}
-\address{INSTITUTION \\
-         Department / Research Group \\
-         City, Country \\
+\address{ Independent Researcher \\
+         Austin, USA \\
          \{aakashdivakar.4869, atharvajoshi253, angadisthere\}@gmail.com}
 
 \begin{document}
@@ -48,9 +47,9 @@ independent adapter stack, the depth of the stack can be set
 \emph{per domain}: the more difficult domain (D3) receives a deeper stack
 than the easier one (D2). Combined with a warm-started per-domain classifier
 head and a supervised contrastive auxiliary loss, this raises the
-domain-agnostic average accuracy on the development set from $50.0\%$
-(reproduced baseline) to $68.5\%$, with D2 and D3 improving from
-$59.2\%/40.8\%$ to $76.2\%/60.8\%$. The shared backbone and the D1 behaviour
+domain-agnostic average accuracy on the test set from $52.5\%$
+ to $68.5\%$, with D2 and D3 improving from
+$58.6\%/46.1\%$ to $76.2\%/60.8\%$. The shared backbone and the D1 behaviour
 are preserved bit-for-bit, so no previously learned domain is forgotten.
 \end{abstract}
 
@@ -86,7 +85,8 @@ never touched, but its plasticity is limited: a handful of affine BN
 parameters is often too little capacity to absorb a large distribution shift,
 which is exactly what we observe on the two harder development domains. The
 contribution of this report is to \emph{increase the per-domain capacity}
-while keeping the forgetting-free property intact. Specifically, we (1) add
+while keeping the forgetting-free property intact (Fig.~\ref{fig:arch}).
+Specifically, we (1) add
 per-domain residual bottleneck adapters after every convolutional block, (2)
 make the adapter depth \emph{asymmetric}, giving the harder domain more
 capacity than the easier one, (3) replace the shared classifier with a
@@ -99,11 +99,25 @@ the domains remain mutually independent.
 \section{Method}
 \label{sec:method}
 
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{Dcase_task7_architecture.png}
+  \caption{Architecture of the submitted system. A shared, frozen CNN14
+    backbone (purple) is augmented with per-domain components: an input and
+    per-block Batch Normalization, a stack of zero-initialised residual
+    bottleneck adapters after every convolutional block (green for D2, amber
+    for D3, with asymmetric depth $1$ vs.\ $3$), and a per-domain linear head.
+    At inference the input is routed through all domains and the
+    minimum-entropy prediction is kept (ADIL). The inset details one residual
+    bottleneck adapter.}
+  \label{fig:arch}
+\end{figure}
+
 \subsection{Backbone and per-domain Batch Normalization}
 \label{ssec:backbone}
 
 We keep the baseline front-end and backbone unchanged. Audio is resampled to
-$32$~kHz and cut to $4$~s segments; a log-mel spectrogram with $64$ mel bands
+$32$~kHz; a log-mel spectrogram with $64$ mel bands
 is computed with a window of $1024$ and a hop of $320$ samples. The backbone
 is CNN14 \cite{kong2020panns}: six convolutional blocks producing
 $\{64,128,256,512,1024,2048\}$ channels, each block being two
