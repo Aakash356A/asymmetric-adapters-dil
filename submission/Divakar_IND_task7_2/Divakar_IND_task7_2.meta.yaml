@@ -1,0 +1,91 @@
+submission:
+  # Submission label
+
+  label: Divakar_IND_task7_2
+
+  # Submission name
+  name: Dataset Augmentation Experiments + Per-domain residual adapters with asymmetric depth for DIL
+
+  abbreviation: Augmentation
+
+  # Authors of the submitted system.
+  authors:
+    - firstname: Aakash
+      lastname: Divakar
+      affiliation: Independent Researcher
+      email: aakashdivakar.4869@gmail.com
+      corresponding: true
+
+    - firstname: Angad Ripudaman Singh 
+      lastname: Bajwa
+      affiliation: Independent Researcher
+      email: angadisthere@gmail.com
+
+    - firstname: Atharva Anand
+      lastname: Joshi
+      affiliation: Independent Researcher
+      email: atharvajoshi253@gmail.com
+
+
+      
+# System information
+system:
+  
+  description:
+    input_sampling_rate: 32000
+
+    acoustic_features: log-mel energies (64 mel bands)
+
+    machine_learning_method: frozen CNN14 (PANNs) backbone with per-domain BatchNorm, per-domain residual bottleneck adapters of asymmetric depth (D2=1, D3=3), and per-domain linear classifier head
+
+    data_augmentation: gain and speed perturbation, time and pitch shift, time stretch, gaussian noise, random eq, temporal masking, fade-in/fade-out, saturation, low-level distractor from dev-train
+
+
+    catastrophic_forgetting_handling: domain_specific_components
+
+ 
+    domain_specific_components: true
+
+
+
+# System results
+results:
+  development_dataset:
+
+    # Accuracy after D2
+    Step2:
+      Domain2:
+        average: 76.84
+        alarm: 66.2
+        dog: 91.3
+        engine: 88.4
+        fire: 55.6
+        footsteps: 75.5
+        knock: 91.7
+        piano: 89.7
+        speech: 73.4
+
+    # Accuracy after D3
+    Step3:
+      Domain2:
+        average: 75.12
+        alarm: 59.2
+        dog: 100.0
+        engine: 89.9
+        fire: 50.0
+        footsteps: 77.6
+        knock: 63.9
+        piano: 88.7
+        speech: 76.9
+
+      Domain3:
+        average: 50.87
+        alarm: 71.0
+        baby: 62.5
+        dog: 50.6
+        engine: 70.6
+        fire: 24.3
+        footsteps: 44.0
+        phone: 48.4
+        piano: 95.9
+        speech: 35.0
