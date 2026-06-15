@@ -1,32 +1,24 @@
 """
 DCASE 2026 Task 7 — submission ResAdapt
+Divakar_IND_task7_1_model.py
 
-Standalone definition of the submitted system:
-    Per-domain residual bottleneck adapters with asymmetric depth, a
-    warm-started per-domain classifier head, on top of a shared, frozen
-    CNN14 backbone with per-domain BatchNorm.
+System: Per-domain residual bottleneck adapters (asymmetric depth) with a
+        per-domain classifier head on top of a shared CNN14 backbone with
+        per-domain BatchNorm.
 
-The backbone (CNN14) is adapted from PANNs by Qiuqiang Kong
-(https://github.com/qiuqiangkong/audioset_tagging_cnn).
-
-Submitted configuration:
-    adapter depths  : D1 = identity, D2 = 1, D3 = 3   (asymmetric)
-    classifier      : per-domain linear head (warm-started from D1)
-    auxiliary loss  : supervised contrastive (training only)
+Backbone adapted from PANNs (Qiuqiang Kong):
+    https://github.com/qiuqiangkong/audioset_tagging_cnn
 
 Usage
 -----
-    from ResAdapt import build_model, ADAPTER_DEPTHS
+Run directly to verify the model loads and print its architecture:
 
-    model = build_model(nb_tasks=3, adapter_depths=ADAPTER_DEPTHS)
-    # final model holding all domains' parameters:
-    state = torch.load("checkpoint/checkpoint_D3.pth", map_location="cpu")
-    model.load_state_dict(state)   # strict=True: keys match exactly
-    model.eval()
+    python Divakar_IND_task7_1_model.py --task 1   # load after D2
+    python Divakar_IND_task7_1_model.py --task 2   # load after D3
 
-    # Domain-agnostic (ADIL) inference: forward through every seen domain's
-    # specific layers and keep the minimum-entropy prediction.
-    logits_per_task = [model(waveform, task=t) for t in range(nb_tasks)]
+The .pth files must be in the same directory as this script:
+    Divakar_IND_task7_1_D2_dictionary.pth
+    Divakar_IND_task7_1_D3_dictionary.pth
 """
 
 import torch
@@ -52,6 +44,11 @@ ADAPTER_DEPTHS = {1: 1, 2: 3}
 
 # Channels produced by each of the 6 CNN14 conv blocks.
 _BLOCK_CHANNELS = (64, 128, 256, 512, 1024, 2048)
+
+# Paths to saved state-dictionaries for each incremental step.
+# task=1 → after D2 training; task=2 → after D3 training.
+CHECKPOINT_D2 = "Divakar_IND_task7_1_D2_dictionary.pth"
+CHECKPOINT_D3 = "Divakar_IND_task7_1_D3_dictionary.pth"
 
 
 def init_layer(layer):
@@ -205,19 +202,34 @@ def build_model(nb_tasks=3, adapter_depths=None, classes_num=CLASSES_NUM):
                             adapter_depths=adapter_depths or ADAPTER_DEPTHS)
 
 
-@torch.no_grad()
-def predict_domain_agnostic(model, waveform, nb_tasks=3):
+def load_model(task: int = 1):
     """
-    Domain-agnostic (ADIL) inference: forward through every seen domain's
-    specific layers and keep, per sample, the minimum-entropy prediction.
+    Return the submitted model with the checkpoint for the given incremental
+    step loaded.
 
-    waveform : (B, T) float tensor, 4 s at 32 kHz.
-    returns  : (B,) predicted class indices.
+    task=1 : model after training on D2  (loads CHECKPOINT_D2)
+    task=2 : model after training on D3  (loads CHECKPOINT_D3)
     """
-    probs = [torch.softmax(model(waveform, task=t), dim=1) for t in range(nb_tasks)]
-    stacked = torch.stack(probs, dim=0)                       # (T, B, C)
-    entropy = -(stacked * torch.log(stacked + 1e-12)).sum(-1)  # (T, B)
-    best = entropy.argmin(dim=0)                               # (B,)
-    idx = torch.arange(waveform.shape[0], device=waveform.device)
-    final = stacked[best, idx, :]                             # (B, C)
-    return final.argmax(dim=1)
+    import os
+    _CKPTS = {1: CHECKPOINT_D2, 2: CHECKPOINT_D3}
+    if task not in _CKPTS:
+        raise ValueError(f"task must be 1 or 2, got {task}")
+
+    model = build_model(nb_tasks=3, adapter_depths=ADAPTER_DEPTHS)
+    ckpt_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), _CKPTS[task])
+    state = torch.load(ckpt_path, map_location="cpu")
+    model.load_state_dict(state)
+    model.eval()
+    return model
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", type=int, default=2,
+                        help="Incremental step to load: 1=D2, 2=D3")
+    args = parser.parse_args()
+
+    model = load_model(task=args.task)
+    print(f"\nModel loaded for task={args.task}\n")
+    print(model)
