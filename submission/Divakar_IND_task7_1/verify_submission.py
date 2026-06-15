@@ -37,7 +37,7 @@ from tqdm import tqdm
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import Divakar_IND_task7_1 as M  # standalone submitted model (same directory)
+import submission.Divakar_IND_task7_1.Divakar_IND_task7_1_model as M  # standalone submitted model (same directory)
 
 NB_TASKS = 3
 

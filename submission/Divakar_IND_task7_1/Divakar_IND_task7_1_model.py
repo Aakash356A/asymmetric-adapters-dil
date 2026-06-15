@@ -11,8 +11,11 @@ Backbone adapted from PANNs (Qiuqiang Kong):
 
 Usage
 -----
-Run directly to verify the model loads and print its architecture:
+Run directly to verify the model loads and print its architecture (by default prints both):
 
+    python Divakar_IND_task7_1_model.py
+    
+    # or specify a task to load:
     python Divakar_IND_task7_1_model.py --task 1   # load after D2
     python Divakar_IND_task7_1_model.py --task 2   # load after D3
 
@@ -226,10 +229,14 @@ def load_model(task: int = 1):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", type=int, default=2,
-                        help="Incremental step to load: 1=D2, 2=D3")
+    parser.add_argument("--task", type=int, default=0,
+                        help="Incremental step to load: 1=D2, 2=D3. If 0 (default), loads and prints both.")
     args = parser.parse_args()
 
-    model = load_model(task=args.task)
-    print(f"\nModel loaded for task={args.task}\n")
-    print(model)
+    tasks_to_load = [1, 2] if args.task == 0 else [args.task]
+
+    for t in tasks_to_load:
+        model = load_model(task=t)
+        print(f"\nModel loaded for task={t}\n{'='*40}\n")
+        print(model)
+        print("\n" + "-" * 80)
