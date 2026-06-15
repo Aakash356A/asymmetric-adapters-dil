@@ -16,15 +16,17 @@ submission:
       email: aakashdivakar.4869@gmail.com
       corresponding: true
 
-    - firstname: Atharva 
+    - firstname: Angad Ripudaman Singh 
+      lastname: Bajwa
+      affiliation: Independent Researcher
+      email: angadisthere@gmail.com
+
+    - firstname: Atharva Anand
       lastname: Joshi
       affiliation: Independent Researcher
       email: atharvajoshi253@gmail.com
 
-    - firstname: Angad
-      lastname: Bajwa
-      affiliation: Independent Researcher
-      email: angadisthere@gmail.com
+
       
 # System information
 system:
