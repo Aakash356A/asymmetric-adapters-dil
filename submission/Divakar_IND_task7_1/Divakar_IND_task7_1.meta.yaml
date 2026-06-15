@@ -46,7 +46,7 @@ system:
  
     domain_specific_components: true
 
-  source_code: https://github.com/Aakash356A/dcase_task7
+
 
 # System results
 results:
