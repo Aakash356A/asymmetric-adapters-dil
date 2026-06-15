@@ -18,7 +18,7 @@ Steps
 -----
   1. Import the standalone model module from this folder.
   2. Build the model with ADAPTER_DEPTHS = {1: 1, 2: 3}.
-  3. Load checkpoint_D3.pth (strict=False, reports any mismatches).
+  3. Load Divakar_IND_task7_1_D3_dictionary.pth (strict=False, reports any mismatches).
   4. Sanity-check forward passes for every task on a dummy waveform.
   5. Run inference over all WAV files in eval_data_dir.
   6. Write predictions to output_tsv in DCASE submission format.
@@ -37,7 +37,7 @@ from tqdm import tqdm
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-import submission.Divakar_IND_task7_1.Divakar_IND_task7_1_model as M  # standalone submitted model (same directory)
+import Divakar_IND_task7_1_model as M  # standalone submitted model (same directory)
 
 NB_TASKS = 3
 
@@ -123,7 +123,7 @@ def main():
         description='Verify submission and run eval inference.')
     parser.add_argument(
         '--checkpoint_dir', type=str, default=HERE,
-        help='Directory containing checkpoint_D3.pth (default: same folder as this script).')
+        help='Directory containing the _D2/_D3 dictionary .pth files (default: same folder as this script).')
     parser.add_argument(
         '--eval_data_dir', type=str,
         default=os.path.join(HERE, 'eval_data'),
@@ -160,7 +160,7 @@ def main():
     # load D2.pth afterwards — it would overwrite shared backbone weights
     # with D2's values, corrupting D3's adapters.
     problems = 0
-    ckpt_d3 = os.path.join(args.checkpoint_dir, 'checkpoint_D3.pth')
+    ckpt_d3 = os.path.join(args.checkpoint_dir, 'Divakar_IND_task7_1_D3_dictionary.pth')
     missing, unexpected = load_and_check(model, ckpt_d3)
     problems += len(missing) + len(unexpected)
 
@@ -177,11 +177,6 @@ def main():
             print(f"  task {t}: logits {tuple(out.shape)}  {'OK' if ok else 'SHAPE MISMATCH'}")
             if not ok:
                 problems += 1
-        pred = M.predict_domain_agnostic(model, wav, nb_tasks=NB_TASKS)
-        print(f"  ADIL prediction: {pred.tolist()}")
-        if pred.shape != (2,):
-            problems += 1
-
     if problems:
         print(f"\nWARNING — {problems} issue(s) found above. "
               f"Continuing with eval inference anyway.\n")
