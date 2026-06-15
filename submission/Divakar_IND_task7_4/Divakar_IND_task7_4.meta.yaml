@@ -1,0 +1,83 @@
+# Submission information
+submission:
+  # Submission label
+  # [Last name of corresponding author]_[Abbreviation of institute]_task[number]_[index 1-4]
+  label: Divakar_IND_task7_4
+
+  # Submission name
+  name: Mahanalobis Distance based Router + Per-domain residual adapters with asymmetric depth for DIL
+
+  abbreviation: Mahanalobis
+
+  # Authors of the submitted system.
+  authors:
+    - firstname: Aakash
+      lastname: Divakar
+      affiliation: Independent Researcher
+      email: aakashdivakar.4869@gmail.com
+      corresponding: true
+
+    - firstname: Angad Ripudaman Singh
+      lastname: Bajwa
+      affiliation: Independent Researcher
+      email: angadisthere@gmail.com
+      
+
+    - firstname: Atharva Anand
+      lastname: Joshi
+      affiliation: Independent Researcher
+      email: atharvajoshi253@gmail.com
+
+
+# System information
+system:
+  # System description, metadata provided here will be used to do a meta-analysis
+  # of the submitted system. Use general level tags where possible.
+  # If a field is not applicable, use "!!null".
+  description:
+    input_sampling_rate: 32000
+
+    acoustic_features: log-mel energies (64 mel bands)
+
+    machine_learning_method: frozen CNN14 (PANNs) backbone with per-domain BatchNorm, per-domain residual bottleneck adapters of asymmetric depth (D2=1, D3=3), and per-domain linear classifier head
+
+    data_augmentation: !!null
+
+
+    catastrophic_forgetting_handling: domain_specific_components
+
+    routing_method: Mahanalobis distance based router
+
+ 
+    domain_specific_components: true
+
+  source_code: https://github.com/Aakash356A/dcase_task7
+
+# System results
+results:
+  development_dataset:
+
+    # Accuracy after D3
+    Step3:
+      Domain 2:
+        average: 68.39
+        alarm: 56.9
+        bark: 91.3
+        engine: 49.3
+        fire: 47.2
+        footsteps: 79.6
+        knock: 77.8
+        piano: 72.2
+        speech: 77.4
+
+      Domain 3:
+        average: 60.17
+        alarm: 67.7
+        baby_cry: 45.8
+        bark: 66.2
+        engine: 55.3
+        fire: 29.7
+        footsteps: 55.2
+        piano: 93.2
+        speech: 61.8
+        telephone_ringing: 19.4
