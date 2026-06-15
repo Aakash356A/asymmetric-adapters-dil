@@ -5,9 +5,9 @@ submission:
   label: Divakar_IND_task7_3
 
   # Submission name
-  name: Ensembling approach using Per-domain residual adapters with asymmetric depth for DIL and Data Augmentation
+  name: Data Augmentation+Per-domain residual adapters with asymmetric depth for DIL
 
-  abbreviation: Ensembling
+  abbreviation: Ensemble
 
   # Authors of the submitted system.
   authors:
@@ -17,18 +17,16 @@ submission:
       email: aakashdivakar.4869@gmail.com
       corresponding: true
 
-    - firstname: Angad Ripudaman Singh 
+    - firstname: Angad Ripudaman Singh
       lastname: Bajwa
       affiliation: Independent Researcher
       email: angadisthere@gmail.com
-
-    - firstname: Atharva 
+      
+    - firstname: Atharva Anand
       lastname: Joshi
       affiliation: Independent Researcher
       email: atharvajoshi253@gmail.com
 
-
-      
 # System information
 system:
   # System description, metadata provided here will be used to do a meta-analysis
@@ -41,7 +39,7 @@ system:
 
     machine_learning_method: frozen CNN14 (PANNs) backbone with per-domain BatchNorm, per-domain residual bottleneck adapters of asymmetric depth (D2=1, D3=3), and per-domain linear classifier head
 
-    data_augmentation: Using 5x data augmentation
+    data_augmentation: Data augmentation 5x
 
 
     catastrophic_forgetting_handling: domain_specific_components
@@ -50,3 +48,31 @@ system:
     domain_specific_components: true
 
   source_code: https://github.com/Aakash356A/dcase_task7
+
+# System results
+results:
+  development_dataset:
+
+    Step3:
+      Domain 2:
+        average: 74.02
+        alarm: 62.3
+        bark: 95.7
+        engine: 88.4
+        fire: 47.2
+        footsteps: 81.6
+        knock: 77.8
+        piano: 80.4
+        speech: 73.4
+
+      Domain 3:
+        average: 50.50
+        alarm: 71.0
+        baby_cry: 58.3
+        bark: 51.9
+        engine: 67.1
+        fire: 27.0
+        footsteps: 42.5
+        piano: 97.3
+        speech: 36.4
+        telephone_ringing: 35.5

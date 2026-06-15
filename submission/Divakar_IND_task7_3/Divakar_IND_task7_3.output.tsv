@@ -1,5 +1,5 @@
-# checkpoint : BN_RES_DEEP_CLF_lr1e-3_bs32_ep240_deep_clf_d3_sup02_aug_5
-# checkpoint_dirs : /data/dcase_2026/audio_classification/dcase_task7/checkpoints/BN_RES_DEEP_CLF_lr1e-3_bs32_ep240_deep_clf_d3_sup02_aug_5,/data/dcase_2026/audio_classification/dcase_task7/checkpoints/BN_RES_DEEP_CLF_lr1e-3_bs32_ep180_deep_clf_d3_ep180
+# checkpoint : BN_RES_DEEP_CLF_lr1e-3_bs32_ep180_deep_clf_d3_ep180
+# checkpoint_dirs : /data/dcase_2026/audio_classification/dcase_task7/checkpoints/BN_RES_DEEP_CLF_lr1e-3_bs32_ep180_deep_clf_d3_ep180,/data/dcase_2026/audio_classification/dcase_task7/checkpoints/BN_RES_DEEP_CLF_lr1e-3_bs32_ep240_deep_clf_d3_sup02_aug_5
 # checkpoint_weights : 1.0,1.0
 # model_type : bn_res_deep_clf
 # adapter_depths : {1: 1, 2: 3}
@@ -1265,7 +1265,7 @@ filename	predicted_class	domain_used	confidence
 37882d98efc26c10.wav	speech	D1	1.0000
 378b930aa07b06dc.wav	bark	D1	0.9818
 37942acdfd4758f2.wav	footsteps	D1	0.9999
-379b0252b656c69c.wav	engine	D3	0.8319
+379b0252b656c69c.wav	engine	D3	0.8320
 379b57cc0ee076d5.wav	speech	D2	0.7646
 379cd012bf083cc.wav	engine	D1	1.0000
 37b3ba84dff2483f.wav	piano	D1	0.9915
@@ -2771,7 +2771,7 @@ filename	predicted_class	domain_used	confidence
 6897d9d23746ac3.wav	bark	D1	0.9884
 689aef8cf21b17d3.wav	footsteps	D1	0.9993
 689ba533c8d49289.wav	engine	D1	0.9429
-689bf8c1143f84a9.wav	piano	D2	0.7244
+689bf8c1143f84a9.wav	piano	D2	0.7245
 689c4285de2e1734.wav	bark	D1	0.9909
 68aed36025061325.wav	telephone_ringing	D1	1.0000
 68b47975eb53f044.wav	footsteps	D2	0.9999
