@@ -7,6 +7,10 @@ checkpoints/
 pretrained_models/
 submission/Divakar_IND_task7_1/checkpoint/
 
+# Generated submission packages
+Divakar_IND_task7/
+Divakar_IND_Dcase_task7/
+
 # Task spec PDF
 dcase_2026_task7.pdf
 
