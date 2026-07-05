@@ -103,11 +103,11 @@ class EvalDataset(Dataset):
         fname = self.files[idx]
         fpath = os.path.join(self.audio_dir, fname)
         audio, _ = librosa.core.load(fpath, sr=sample_rate, mono=True)
-        # Pad to clip_samples (4 s); truncate if longer
+        # Pad if shorter than 4 s; pass full audio unchanged if longer
+        # (matches training-val behaviour: pad_sequence returns x as-is when len >= max_len,
+        #  and CNN14's global avg+max pooling is length-agnostic)
         if len(audio) < clip_samples:
             audio = np.concatenate([audio, np.zeros(clip_samples - len(audio))])
-        else:
-            audio = audio[:clip_samples]
         return torch.from_numpy(audio).float(), fname
 
 
@@ -191,7 +191,7 @@ def evaluate(args):
         if args.eval_data_dir is None else args.eval_data_dir
     dataset = EvalDataset(eval_dir)
     loader  = DataLoader(
-        dataset, batch_size=args.batch_size, shuffle=False,
+        dataset, batch_size=1, shuffle=False,
         num_workers=args.num_workers, pin_memory=(device == 'cuda'),
     )
     print(f'Found {len(dataset)} eval files in {eval_dir}')

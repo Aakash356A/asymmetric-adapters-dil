@@ -20,8 +20,14 @@ Usage
 Omit --panns_ckpt to train the backbone from scratch (weaker; use more epochs).
 The PANNs checkpoint is the standard Cnn14 model from
 https://zenodo.org/records/3987831 (Cnn14_mAP=0.431.pth).
+
+Add --resume to continue training from an existing checkpoint_D1.pth in
+--checkpoint_dir instead of starting fresh (PANNs init is skipped in that
+case, since the backbone has already moved past it). All stdout is also
+appended to <checkpoint_dir>/train_d1.log.
 """
 import argparse
+import datetime
 import os
 import sys
 
@@ -41,6 +47,22 @@ sys.path.insert(0, os.path.join(_REPO, 'code', 'baseline'))
 import config_task7 as config          # real config, TAU mode via DCASE_DATASET
 from domain_net_arch import MCnn14ResDeepClf, set_adapter_depths
 from datasetfactory_task7 import DILDatasetInc as DILDataset
+
+
+class _Tee:
+    """Duplicate writes to multiple streams (e.g. console + log file)."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+            s.flush()
+
+    def flush(self):
+        for s in self.streams:
+            s.flush()
 
 
 def map_panns_to_backbone(model, panns_path):
@@ -96,13 +118,22 @@ def main():
     ap.add_argument('--cuda', action='store_true')
     ap.add_argument('--adapter_depths', default='1,3',
                     help='kept for key-compatibility with the incremental run')
+    ap.add_argument('--resume', action='store_true',
+                    help='continue training from an existing checkpoint_D1.pth '
+                         'in --checkpoint_dir instead of starting fresh')
     args = ap.parse_args()
 
     device = ('cuda' if (args.cuda and torch.cuda.is_available())
               else 'mps' if torch.backends.mps.is_available() else 'cpu')
-    print('device:', device)
 
     os.makedirs(args.checkpoint_dir, exist_ok=True)
+    ckpt_path = os.path.join(args.checkpoint_dir, 'checkpoint_D1.pth')
+
+    log_file = open(os.path.join(args.checkpoint_dir, 'train_d1.log'), 'a')
+    sys.stdout = _Tee(sys.stdout, log_file)
+    print(f'\n===== run started {datetime.datetime.now().isoformat()} =====')
+    print('args:', vars(args))
+    print('device:', device)
 
     depths = [int(d) for d in args.adapter_depths.split(',') if d.strip()]
     set_adapter_depths({t + 1: depths[t] for t in range(len(depths))})
@@ -112,10 +143,17 @@ def main():
         config.mel_bins, config.fmin, config.fmax,
         config.classes_num_DIL, nb_tasks=3)
 
-    if args.panns_ckpt:
+    resuming = args.resume and os.path.isfile(ckpt_path)
+    if args.panns_ckpt and not resuming:
         map_panns_to_backbone(model, args.panns_ckpt)
 
     model.to(device)
+
+    if resuming:
+        print(f'--resume: loading existing checkpoint from {ckpt_path}')
+        model.load_state_dict(torch.load(ckpt_path, map_location=device))
+    elif args.resume:
+        print(f'--resume set but no checkpoint found at {ckpt_path}; starting from scratch')
 
     # D1 rows only.
     train_df = config.df_DIL_dev_train[config.df_DIL_dev_train['domain'] == 'D1']
@@ -151,8 +189,9 @@ def main():
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(
         opt, T_max=args.epochs, eta_min=1e-7)
 
-    best_acc = -1.0
-    ckpt_path = os.path.join(args.checkpoint_dir, 'checkpoint_D1.pth')
+    best_acc = evaluate(model, test_loader, device) if resuming else -1.0
+    if resuming:
+        print(f'  resumed model D1 test acc: {best_acc:.2f}%')
     for epoch in range(args.epochs):
         model.train()
         running = 0.0
