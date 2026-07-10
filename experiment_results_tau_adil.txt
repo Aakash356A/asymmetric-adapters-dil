@@ -1,0 +1,21 @@
+                                                                                      
+Done. Best D1 test acc 76.57%. Checkpoint: /home/aakash/dcase_task7/checkpoints/TAU_ad
+il_D1_base_depths2_2_2/checkpoint_D1.pth       
+
+2026-07-10 05:34:08 | TAU_ADIL_bn_res_deep_clf_depths2_2_2_lr1e-3_bs32_ep180_con0.2 | D2=65.17% | D3=73.28% | D4=72.46% | Avg=70.30333333333333% | DONE
+D4 test: 414 clips  (aware = D4 head forced, agnos = entropy router, unadapt = D1 head)
+
+class                 n  aware%  agnos% unadapt%   routed D1/D2/D3 (%)
+----------------------------------------------------------------------
+airport              48    31.2    31.2     87.5     29/  27/  42
+bus                  44    97.7    95.5     59.1      9/   7/  77
+metro                42    95.2    81.0     47.6      0/  12/   7
+metro_station        36    50.0    47.2     61.1     17/  36/   6
+park                 36    38.9    11.1     36.1      3/   6/  78   <== collapse
+public_square        48    58.3    75.0     37.5      2/  65/  23
+shopping_mall        36    86.1   100.0     91.7      0/   8/  75
+street_pedestrian    45    42.2    97.8     15.6      0/  69/  29
+street_traffic       36   100.0   100.0     86.1      0/   0/  56
+tram                 43    86.0    72.1     16.3      0/  12/  19
+----------------------------------------------------------------------
+OVERALL             414    67.9    71.3     52.9

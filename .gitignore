@@ -1,6 +1,7 @@
 # Data
 dataset/
 task7_data/
+tau_data_adil/
 
 # Model weights / checkpoints
 checkpoints/
