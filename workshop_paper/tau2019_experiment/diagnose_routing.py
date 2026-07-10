@@ -47,17 +47,18 @@ import config_task7 as config                       # tau mode via DCASE_DATASET
 from domain_net_arch import MCnn14ResDeepClf, set_adapter_depths
 from datasetfactory_task7 import DILDatasetInc as DILDataset
 
-DOMAIN_TO_TASK = {'D1': 0, 'D2': 1, 'D3': 2}
+DOMAIN_TO_TASK = {'D1': 0, 'D2': 1, 'D3': 2, 'D4': 3}
 EPS = torch.finfo(torch.float32).tiny
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--checkpoint', required=True,
-                    help='Final model state_dict, e.g. checkpoints/TAU_run/checkpoint_D3.pth')
-    ap.add_argument('--domain', default='D3', choices=['D2', 'D3'])
-    ap.add_argument('--nb_tasks', type=int, default=3,
-                    help='Domains trained so far + 1 (D1). After D3 -> 3.')
+                    help='Final model state_dict, e.g. checkpoints/TAU_run/checkpoint_D4.pth')
+    ap.add_argument('--domain', default='D3', choices=['D2', 'D3', 'D4'])
+    ap.add_argument('--nb_tasks', type=int, default=None,
+                    help='Total domains incl. D1 (default: derive from manifest, '
+                         'e.g. 4 for the ADIL D1..D4 protocol).')
     ap.add_argument('--adapter_depths', default='1,3')
     ap.add_argument('--num_workers', type=int, default=4)
     ap.add_argument('--cuda', action='store_true')
@@ -70,10 +71,12 @@ def main():
     depths = [int(d) for d in args.adapter_depths.split(',') if d.strip()]
     set_adapter_depths({t + 1: depths[t] for t in range(len(depths))})
 
+    nb_tasks = args.nb_tasks or int(config.df_DIL_dev_train['domain'].nunique())
+
     model = MCnn14ResDeepClf(
         config.sample_rate, config.window_size, config.hop_size,
         config.mel_bins, config.fmin, config.fmax,
-        config.classes_num_DIL, nb_tasks=args.nb_tasks)
+        config.classes_num_DIL, nb_tasks=nb_tasks)
     inc = model.load_state_dict(torch.load(args.checkpoint, map_location='cpu'),
                                 strict=False)
     if inc.missing_keys:
@@ -83,7 +86,7 @@ def main():
     model.eval().to(device)
 
     forced_task = DOMAIN_TO_TASK[args.domain]
-    n_tasks = args.nb_tasks
+    n_tasks = nb_tasks
 
     df = config.df_DIL_dev_test[config.df_DIL_dev_test['domain'] == args.domain]
     if len(df) == 0:

@@ -975,13 +975,13 @@ def train(args):
     filename = args.filename
     num_workers = args.num_workers
 
-    dil_tasks_0 = ['D1'] # Model is trained on D1 and its checkpoint is released without data
+    dil_tasks_0 = ['D1'] # D1 base is trained separately; checkpoint released without data
 
-    dil_task_1 = ['D2']
-
-    dil_task_2 = ['D3']
-
-    dil_tasks = [dil_task_1, dil_task_2]
+    # Auto-derive the incremental domain sequence from the manifest so the same
+    # code path handles 3 domains (D2, D3) or 4+ (D2, D3, D4, ...). D1 is the
+    # frozen base and is excluded here.
+    incr_domains = sorted(d for d in df_dev_train['domain'].unique() if d != 'D1')
+    dil_tasks = [[d] for d in incr_domains]
     print('Tasks:', dil_tasks)
 
     np.random.seed(1193)

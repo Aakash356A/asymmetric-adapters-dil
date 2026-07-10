@@ -19,7 +19,7 @@
 
 % Title.
 % --------------------
-\title{PER-DOMAIN RESIDUAL ADAPTERS WITH ASYMMETRIC DEPTH FOR\\
+\title{ASYMMETRIC RESIDUAL ADAPTERS FOR\\
 DOMAIN-INCREMENTAL AUDIO CLASSIFICATION}
 
 \name{Aakash Divakar*, Angad Ripudaman Singh Bajwa*, Atharva Anand Joshi*\thanks{*The three authors
@@ -32,30 +32,30 @@ contributed equally to this work.}}
 \sloppy
 
 \begin{abstract}
-We describe our submission to DCASE 2026 Task~7, Domain-Incremental
-Learning (DIL) for audio classification, where a system ranked 5th on the
-challenge leaderboard. Starting from the released ADIL baseline, which adds
-per-domain Batch Normalization (BN) and a per-domain classifier to a shared,
-frozen CNN14 backbone, we identify limited per-domain capacity as the main
+Domain-incremental learning (DIL) requires a single model to classify a
+fixed set of sound classes as the recording conditions change across a
+sequence of domains, without access to earlier-domain data and without
+forgetting. We study this problem in the setting of DCASE 2026 Task~7.
+Starting from the released ADIL baseline, which adds per-domain
+Batch Normalization (BN) and a per-domain classifier to a shared, frozen
+CNN14 backbone, we identify limited per-domain capacity as the main
 bottleneck on the harder domains. We insert, on top of the frozen backbone,
 a stack of zero-initialised \emph{residual bottleneck adapters} after every
-convolutional block. Because each domain owns an independent adapter stack,
-its depth can be set \emph{per domain}: the harder domain (D3) receives a
-deeper stack than the easier one (D2). Combined with a warm-started
-per-domain classifier head and a supervised contrastive auxiliary loss, this
-raises the domain-agnostic average accuracy on the dev-test set from
-$50.0\%$ to $68.5\%$, with D2 and D3 improving from $59.2\%/40.8\%$ to
-$76.2\%/60.8\%$. We further study three domain-routing strategies and a
-waveform-augmentation pipeline, and show that a lightweight learned router
-can add a further $0.8$ points on dev-test but generalises poorly to the
-unlabeled evaluation set, whereas the parameter-free entropy router remains
-the more robust choice. Finally, we stress-test the system on ESC-50, a
-domain never seen during training: accuracy on the overlapping classes is
-higher than on the in-domain dev-test references, but entropy routing
-confidently misroutes this genuinely unseen audio rather than abstaining,
-which we identify as a more practical failure mode than raw accuracy. The
-shared backbone and D1 behaviour are preserved bit-for-bit, so no
-previously learned domain is forgotten.
+convolutional block, with the stack depth set \emph{per domain} so the
+harder domain receives more capacity. Combined with a warm-started
+per-domain head and a supervised contrastive loss, this raises the
+domain-agnostic average accuracy on the development set from $50.0\%$ to
+$68.5\%$, while reproducing the first domain bit-for-bit so nothing is
+forgotten. To test generality, we build a second DIL benchmark from TAU
+Urban Acoustic Scenes 2019 with cities as domains; against a per-domain BN
+baseline retrained under an identical protocol, the same method improves
+the average from $52.1\%$ to $73.7\%$, showing the gains are not
+dataset-specific. Finally, we
+compare three domain-routing strategies and find the parameter-free entropy
+router the most robust: learned routers overfit the development split, and,
+on genuinely unseen domains (ESC-50), entropy routing mis-routes with high
+confidence rather than abstaining --- a failure mode we argue is more
+consequential for deployment than raw accuracy.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -314,7 +314,9 @@ preserving D1 exactly.
 \begin{table}[t]
   \centering
   \caption{Domain-agnostic accuracy ($\%$) on the dev-test split, adding
-           one component at a time. The last row is the submitted system.}
+           one component at a time. The baseline row is our reproduction of
+           the ADIL method \cite{mulimani2025dil}; the last row is the
+           submitted system.}
   \label{tab:ablation}
   \begin{tabularx}{\columnwidth}{Xccc}
     \toprule
@@ -387,74 +389,46 @@ $1,3$, 180~epochs).
   \end{tabularx}
 \end{table}
 
-Entropy routing works well with no training overhead, and benefits
-implicitly from the per-domain head calibration enforced by the supervised
-contrastive loss: well-calibrated heads produce more separable entropy
-values across domains. Mahalanobis routing adds an explicit geometric
-model of the domain feature distributions. Without a rejection threshold
-it matches entropy routing in final accuracy ($66.7\%$) while achieving
-$73.2\%$ D2$\leftrightarrow$D3 routing accuracy on dev-test, confirming
-that D2 and D3 occupy separable, though overlapping, regions in D1-BN
-space (mean distances $d_{D2}\!\approx\!42.0$, $d_{D3}\!\approx\!44.0$).
-With $\tau=60$, $22.8\%$ of D2/D3 samples are rejected to D1, which
-\emph{degrades} average accuracy: a global distance threshold is a coarse
-instrument when the D1 and D2/D3 distributions are not cleanly separated.
+Entropy routing needs no training and benefits from the per-domain head
+calibration enforced by the contrastive loss: well-calibrated heads give
+more separable entropy across domains. Mahalanobis routing adds an explicit
+geometric model of the domain distributions; without a rejection threshold
+it matches entropy routing ($66.7\%$) at $73.2\%$ D2$\leftrightarrow$D3
+routing accuracy, confirming that D2 and D3 occupy separable but
+overlapping regions in D1-BN space. With $\tau=60$, $22.8\%$ of D2/D3
+samples are rejected to D1 and the average \emph{drops}: a global distance
+threshold is too coarse when D1 and D2/D3 are not cleanly separated.
 
-GAP-MLP routing concatenates domain-specific GAP representations from all
-three heads. The best epoch (3) reaches $69.3\%$ average accuracy on
-dev-test but overfits quickly: epoch 5 degrades D2 from $76.5\%$ to
-$75.0\%$ and the average from $69.3\%$ to $68.9\%$. More tellingly, on the
-\emph{unlabeled} evaluation set the learned router assigns only $0.6\%$ of
-samples to D1 ($61.0\%$/$38.5\%$ to D2/D3) — it almost never rejects a
-sample, suggesting it memorised the dev-train distribution rather than a
-robust rejection criterion. We keep entropy routing as the submitted
-default: GAP-MLP and Mahalanobis show that a well-calibrated single model
-already captures most of the achievable routing accuracy here, while
-learned routers add a threshold-calibration burden without a reliable
-held-out gain.
+GAP-MLP routing concatenates the domain-specific GAP features of all three
+heads. Its best epoch reaches $69.3\%$ but overfits quickly, and on the
+\emph{unlabeled} evaluation set it assigns only $0.6\%$ of samples to D1
+($61.0\%$/$38.5\%$ to D2/D3) --- it almost never rejects, having memorised
+the dev-train distribution rather than a robust criterion. We keep entropy
+routing as the default: the learned routers add a threshold-calibration
+burden without a reliable held-out gain.
 
 \subsection{Effect of waveform augmentation}
 \label{ssec:aug_results}
-Table~\ref{tab:augmentation} reports the result of enabling the
-waveform-level augmentation pipeline (Sec.~\ref{ssec:data_aug}), trained
-for $240$ epochs with the same $\lambda_{con}=0.2$, $\tau=0.07$, and
-asymmetric depths $(1,3)$ as the submitted system.
-
-\begin{table}[t]
-  \centering
-  \caption{Waveform augmentation result.}
-  \label{tab:augmentation}
-  \begin{tabularx}{\columnwidth}{Xccc}
-    \toprule
-    System & D2 & D3 & Avg \\
-    \midrule
-    waveform augmentation
-      & 75.4 & 51.4 & 63.4 \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
-
-The augmented run remains strong on D2 but loses accuracy on D3 relative
-to the best non-augmented asymmetric-depth system. This suggests the
-augmentation distribution may be too broad for the hardest domain: while
-the perturbations improve diversity, aggressive temporal warping, pitch
-changes, filtering, and distractor mixing can also move some samples away
-from the D3 characteristics that the adapter stack needs to specialise
-for. We therefore treat this pipeline as a robustness-oriented ablation
-rather than the final selected configuration; test-time augmentation and
-checkpoint ensembling were likewise within noise of the single frozen
-model and were dropped to keep the submission simple.
+Enabling the waveform-level augmentation pipeline
+(Sec.~\ref{ssec:data_aug}; $240$ epochs, same $\lambda_{con}$/$\tau$/depths)
+gives D2/D3/average of $75.4/51.4/63.4\%$: still strong on D2 but losing on
+D3 relative to the best non-augmented system. The augmentation distribution
+appears too broad for the hardest domain --- aggressive temporal warping,
+pitch changes, filtering, and distractor mixing move some samples away from
+the D3 characteristics the adapter stack must specialise for. We therefore
+treat it as a robustness-oriented ablation rather than the final
+configuration; test-time augmentation and checkpoint ensembling were
+likewise within noise of the single frozen model and were dropped to keep
+the submission simple.
 
 \subsection{Asymmetric depth and contrastive weight}
 \label{ssec:choices}
 
-Giving \emph{both} domains depth-2 stacks scored $65.1\%$, whereas the
-asymmetric $(1,3)$ allocation reached $67.4\%$ at a similar parameter
-budget: the capacity is better spent on the domain that actually needs it
-(D3) than spread evenly. Sweeping the SupCon weight
-$\lambda\in\{0.1,0.15,0.2,0.25,0.3\}$ peaked at $\lambda=0.2$ ($66.7\%$);
-larger values began to compete with the cross-entropy term and slightly
-hurt accuracy.
+Giving \emph{both} domains depth-2 stacks scored $65.1\%$ versus $67.4\%$
+for the asymmetric $(1,3)$ allocation at a similar parameter budget:
+capacity is better spent on the domain that needs it (D3) than spread
+evenly. The SupCon weight peaked at $\lambda=0.2$ ($66.7\%$); larger values
+competed with the cross-entropy term and slightly hurt accuracy.
 
 \subsection{Frozen backbone vs.\ partial unfreezing}
 \label{ssec:discussion}
@@ -466,13 +440,11 @@ the best D3 number we obtained --- but because the backbone is shared, D2
 collapses to $58.5\%$, since D2's BN and adapters were tuned for the
 original features. Anchoring the drift with an $\ell_2$ penalty toward the
 previous checkpoint recovers D2 but cancels most of the D3 gain, and
-restricting the unfreezing to D3's own forward pass still leaves D2
-degraded. Unfreezing three blocks destabilises training entirely. Across
-the whole sweep, \emph{no} unfrozen configuration beat the fully-frozen
-adapter system on average: the shared weights couple the domains and trade
-one against the other. We therefore keep the backbone frozen and rely on
-per-domain adapters, which add plasticity \emph{without} any cross-domain
-interference.
+D3-only unfreezing still leaves D2 degraded; three blocks destabilise
+training entirely. No unfrozen configuration beat the fully-frozen adapter
+system on average --- the shared weights couple the domains --- so we keep
+the backbone frozen and rely on per-domain adapters, which add plasticity
+\emph{without} cross-domain interference.
 
 \begin{table}[t]
   \centering
@@ -492,6 +464,47 @@ interference.
     \bottomrule
   \end{tabularx}
 \end{table}
+
+\subsection{Generalization to a second dataset}
+\label{ssec:tau}
+
+All results so far are on Task~7. To test transfer, we build a second DIL
+benchmark from TAU Urban Acoustic Scenes 2019 \cite{heittola2019tau}, using
+three cities as the sequence $\mathcal{D}_1\!\rightarrow\!\mathcal{D}_2\!
+\rightarrow\!\mathcal{D}_3$ (the same ten scene classes throughout; the
+domain shift is the change of city). We train the $\mathcal{D}_1$ backbone
+on the first city, freeze it, and apply the identical adapter recipe; for a
+controlled comparison we retrain the per-domain BN baseline
+\cite{mulimani2025dil} on the same splits.
+
+\begin{table}[t]
+  \centering
+  \caption{Second benchmark (TAU2019 cities): domain-agnostic accuracy
+           (\%). Both rows are trained by us under an identical protocol.}
+  \label{tab:tau}
+  \begin{tabularx}{\columnwidth}{Xccc}
+    \toprule
+    System & D2 & D3 & Avg \\
+    \midrule
+    Per-domain BN (baseline)        & 57.1 & 47.1 & 52.1 \\
+    Residual adapters (\emph{ours}) & \textbf{75.9} & \textbf{71.5} & \textbf{73.7} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The pattern repeats: per-domain adapters lift the BN baseline by $+21.6$
+points ($52.1\!\rightarrow\!73.7$), close to the $+18.5$ on Task~7
+($50.0\!\rightarrow\!68.5$). The un-adapted backbone ($\mathcal{D}_1$ head
+applied to $\mathcal{D}_3$) scores only $44.4\%$, so the adapters recover
+about $27$ points of the cross-city shift; the gains are not specific to
+Task~7. The only per-class collapses on $\mathcal{D}_3$ are airport (an
+intrinsically weak head --- $21\%$ even when its own head is selected
+directly, reflecting the notorious confusability of large reverberant
+spaces) and park (a usable $53\%$ head that the entropy router nonetheless
+sends to $\mathcal{D}_2$ $78\%$ of the time). The latter is exactly the
+routing failure of Sec.~\ref{ssec:esc50}: entropy routing is net-positive
+overall but per-class unreliable, with no way to signal ``none of the seen
+domains.''
 
 \subsection{Generalization to an unseen domain}
 \label{ssec:esc50}
@@ -521,18 +534,14 @@ of the same 7 classes from D2/D3 dev-test.
 \end{table}
 
 Two findings stand out. Accuracy on unseen ESC-50 clips is \emph{higher}
-than on either in-domain reference, so the D2/D3 gap is not simply domain
-novelty: ESC-50's single-source, high-SNR recordings are acoustically
-easier, and part of the D3 shortfall in Table~\ref{tab:ablation} is
-intrinsic sample difficulty rather than insufficient adapter capacity.
-More importantly, entropy routing has no notion of ``none of the above'':
-ESC-50 is routed to D2/D3 with mean entropy ($0.027$) as low as the
-confident D3 reference. A router calibrated only on
-$\mathcal{D}_1$--$\mathcal{D}_3$ will confidently mis-route out-of-scope
-audio rather than abstain; only an explicit-rejection router, e.g.\
-thresholded Mahalanobis distance (Sec.~\ref{ssec:routing}), can express
-``this is neither D2 nor D3,'' which we see as the more practical failure
-mode to address before deployment.
+than on either in-domain reference, so the D2/D3 gap is not merely domain
+novelty --- ESC-50's single-source, high-SNR recordings are acoustically
+easier, and part of the D3 shortfall is intrinsic sample difficulty, not
+missing adapter capacity. More importantly, entropy routing has no notion
+of ``none of the above'': ESC-50 is routed to D2/D3 with mean entropy
+($0.027$) as low as the confident D3 reference. Only an explicit-rejection
+router (e.g.\ thresholded Mahalanobis distance) can express ``neither D2
+nor D3,'' the more practical failure mode to address before deployment.
 
 
 \section{Conclusion}
@@ -543,13 +552,15 @@ that increases per-domain capacity through zero-initialised residual
 adapters, with asymmetric depth, a warm-started per-domain classifier, and
 a supervised contrastive loss. The system raises the domain-agnostic
 dev-test average from $50.0\%$ to $68.5\%$ while reproducing
-$\mathcal{D}_1$ exactly, and placed 5th in the DCASE 2026 Task~7 challenge.
-Entropy routing remains the most robust of the three routers studied: it
-needs no training and, unlike GAP-MLP, does not overfit to the labeled
-split or misroute unseen-domain audio with false confidence (Sec.~\ref{ssec:esc50}).
-Closing the D3 gap without the cross-domain interference seen when
-unfreezing the backbone, and combining entropy routing's reliability with
-an explicit rejection option, are left for future work.
+$\mathcal{D}_1$ exactly, and the same recipe transfers to a second
+benchmark (TAU2019 cities), lifting a per-domain BN baseline from $52.1\%$
+to $73.7\%$. Entropy routing remains the most robust of the three routers
+studied: it needs no training and, unlike GAP-MLP, does not overfit to the
+labeled split or misroute unseen-domain audio with false confidence
+(Sec.~\ref{ssec:tau},~\ref{ssec:esc50}). Closing the remaining hard-class
+gap without the cross-domain interference seen when unfreezing the
+backbone, and combining entropy routing's reliability with an explicit
+rejection option, are left for future work.
 
 
 % -------------------------------------------------------------------------

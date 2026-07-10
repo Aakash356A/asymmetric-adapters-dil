@@ -81,15 +81,32 @@ def main():
     ap.add_argument('--tau_root', required=True,
                     help='Extracted TAU2019 development directory.')
     ap.add_argument('--cities', default='lisbon,lyon,prague',
-                    help='Comma-separated city names for D1,D2,D3 (in order).')
+                    help='Comma-separated city names for D1,D2,D3 (in order). '
+                         'One city per domain; ignored if --domains is given.')
+    ap.add_argument('--domains', default=None,
+                    help="Domain spec that can POOL cities into one domain: "
+                         "';' separates domains, '+' pools cities within a "
+                         "domain. Overrides --cities and supports any number "
+                         "of domains. Example (ADIL protocol): "
+                         "'barcelona+helsinki+london+paris+stockholm+vienna;"
+                         "lisbon;lyon;prague' -> D1=6 cities, D2=lisbon, "
+                         "D3=lyon, D4=prague.")
     ap.add_argument('--out', default=None,
                     help='Output dir (default <repo>/tau_data).')
     ap.add_argument('--limit_per_city', type=int, default=None,
                     help='Debug: cap files per city.')
     args = ap.parse_args()
 
-    cities = [c.strip().lower() for c in args.cities.split(',') if c.strip()]
-    assert len(cities) == 3, 'need exactly 3 cities for D1,D2,D3'
+    # Each domain is a list of cities (usually one; several when pooled).
+    if args.domains:
+        domain_cities = [[c.strip().lower() for c in grp.split('+') if c.strip()]
+                         for grp in args.domains.split(';') if grp.strip()]
+    else:
+        domain_cities = [[c.strip().lower()]
+                         for c in args.cities.split(',') if c.strip()]
+        assert len(domain_cities) == 3, \
+            'need exactly 3 cities for D1,D2,D3 (or use --domains to pool/extend)'
+    all_cities = sorted({c for grp in domain_cities for c in grp})
 
     repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     out = args.out or os.path.join(repo, 'tau_data')
@@ -99,7 +116,7 @@ def main():
 
     # Read meta.csv -> list of (audio_relpath, scene) for the chosen cities.
     meta_path = os.path.join(args.tau_root, 'meta.csv')
-    per_city = {c: [] for c in cities}
+    per_city = {c: [] for c in all_cities}
     with open(meta_path) as f:
         reader = csv.reader(f, delimiter='\t')
         header = next(reader, None)
@@ -113,15 +130,16 @@ def main():
                 per_city[c].append((rel, scene))
 
     train_rows, test_rows = [], []
-    for di, city in enumerate(cities, start=1):
+    for di, city_group in enumerate(domain_cities, start=1):
         dom = f'D{di}'
-        files = sorted(per_city[city])
+        label = '+'.join(city_group)
+        files = sorted(f for c in city_group for f in per_city[c])
         if args.limit_per_city:
             files = files[:args.limit_per_city]
         if not files:
-            raise RuntimeError(f'no files found for city "{city}" — check --tau_root/--cities')
+            raise RuntimeError(f'no files found for domain "{label}" — check --tau_root/--domains')
         n_train = n_test = 0
-        for rel, scene in tqdm(files, desc=f'{dom}={city}'):
+        for rel, scene in tqdm(files, desc=f'{dom}={label}'):
             tag = split.get(rel, 'train')      # default to train if unlisted
             sub = f'{dom}-{tag}'
             os.makedirs(os.path.join(out, sub), exist_ok=True)
@@ -137,7 +155,7 @@ def main():
                 n_train += 1
             else:
                 n_test += 1
-        print(f'  {dom} ({city}): {n_train} train, {n_test} test')
+        print(f'  {dom} ({label}): {n_train} train, {n_test} test')
 
     def _write(path, rows):
         with open(path, 'w', newline='') as f:
@@ -147,7 +165,8 @@ def main():
     _write(os.path.join(out, 'evaluation_setup', 'development_train.txt'), train_rows)
     _write(os.path.join(out, 'evaluation_setup', 'development_test.txt'), test_rows)
     print(f'\nWrote {len(train_rows)} train / {len(test_rows)} test rows to {out}')
-    print('Domains: ' + ', '.join(f'D{i+1}={c}' for i, c in enumerate(cities)))
+    print('Domains: ' + ', '.join(f'D{i+1}={"+".join(g)}'
+                                  for i, g in enumerate(domain_cities)))
 
 
 if __name__ == '__main__':

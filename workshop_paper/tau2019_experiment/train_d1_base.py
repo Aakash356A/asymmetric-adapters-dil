@@ -118,6 +118,9 @@ def main():
     ap.add_argument('--cuda', action='store_true')
     ap.add_argument('--adapter_depths', default='1,3',
                     help='kept for key-compatibility with the incremental run')
+    ap.add_argument('--nb_tasks', type=int, default=None,
+                    help='Total domains incl. D1 (default: derive from manifest, '
+                         'e.g. 4 for the ADIL D1..D4 protocol).')
     ap.add_argument('--resume', action='store_true',
                     help='continue training from an existing checkpoint_D1.pth '
                          'in --checkpoint_dir instead of starting fresh')
@@ -138,10 +141,16 @@ def main():
     depths = [int(d) for d in args.adapter_depths.split(',') if d.strip()]
     set_adapter_depths({t + 1: depths[t] for t in range(len(depths))})
 
+    # nb_tasks must match the full DIL sequence (incl. D1) so the saved
+    # state-dict has a slot for every domain the incremental run will fill.
+    # Derive it from the manifest (e.g. 4 for the ADIL D1..D4 protocol).
+    nb_tasks = args.nb_tasks or int(config.df_DIL_dev_train['domain'].nunique())
+    print(f'nb_tasks (domains incl. D1): {nb_tasks}')
+
     model = MCnn14ResDeepClf(
         config.sample_rate, config.window_size, config.hop_size,
         config.mel_bins, config.fmin, config.fmax,
-        config.classes_num_DIL, nb_tasks=3)
+        config.classes_num_DIL, nb_tasks=nb_tasks)
 
     resuming = args.resume and os.path.isfile(ckpt_path)
     if args.panns_ckpt and not resuming:
