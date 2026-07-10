@@ -1,0 +1,4 @@
+2026-07-10 15:19:01 | D1     | 6cities    | best_acc=76.33% | ckpt_dir=/home/aakash/dcase_task7/checkpoints/TAU_standalone_D1_6cities
+2026-07-10 15:55:25 | D2     | lisbon     | best_acc=81.79% | ckpt_dir=/home/aakash/dcase_task7/checkpoints/TAU_standalone_D2_lisbon
+2026-07-10 16:30:24 | D3     | lyon       | best_acc=82.97% | ckpt_dir=/home/aakash/dcase_task7/checkpoints/TAU_standalone_D3_lyon
+2026-07-10 17:06:17 | D4     | prague     | best_acc=71.26% | ckpt_dir=/home/aakash/dcase_task7/checkpoints/TAU_standalone_D4_prague
