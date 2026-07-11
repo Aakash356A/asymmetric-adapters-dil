@@ -1,0 +1,78 @@
+   Tasks: [['D2'], ['D3'], ['D4']]                                                       
+  [bn_res_deep] per-task adapter depths = {1: 3, 2: 2, 3: 2}                          
+  [checkpoint] missing keys (DTN params, will use init): 18                           
+model trained on Task D1 is loaded  
+
+    airport: 72.2%                                                                    
+    bus: 52.4%                                                                        
+    metro: 94.9%                                                                      
+    metro_station: 72.2%                                                              
+    park: 100.0%                                                                      
+    public_square: 93.3%                                                              
+    shopping_mall: 5.6%                                                               
+    street_pedestrian: 57.5%                                                          
+    street_traffic: 100.0%                                                            
+    tram: 66.7%                                                                       
+seen domain: ['D2'] and its accuracy: 70.71                                           
+Average Accuracy:  70.71 
+
+airport: 0.0%                                                                     
+    bus: 66.7%                                                                        
+    metro: 79.5%                                                                      
+    metro_station: 69.4%                                                              
+    park: 100.0%                                                                      
+    public_square: 86.7%                                                              
+    shopping_mall: 5.6%                                                               
+    street_pedestrian: 65.0%                                                          
+    street_traffic: 100.0%                                                            
+    tram: 41.7%                                                                       
+seen domain: ['D2'] and its accuracy: 60.69                                           
+    airport: 63.9%                                                                    
+    bus: 100.0%                                                                       
+    metro: 73.1%                                                                      
+    metro_station: 69.1%                                                              
+    park: 100.0%                                                                      
+    public_square: 35.1%                                                              
+    shopping_mall: 51.0%                                                              
+    street_pedestrian: 95.0%                                                          
+    street_traffic: 100.0%                                                            
+    tram: 92.0%                                                                       
+seen domain: ['D3'] and its accuracy: 75.22                                           
+Average Accuracy:  67.955  
+
+
+   airport: 0.0%
+    bus: 85.7%
+    metro: 74.4%
+    metro_station: 69.4%
+    park: 100.0%
+    public_square: 76.7%
+    shopping_mall: 36.1%
+    street_pedestrian: 60.0%
+    street_traffic: 100.0%
+    tram: 43.8%
+seen domain: ['D2'] and its accuracy: 64.12
+    airport: 58.3%
+    bus: 100.0%
+    metro: 71.2%
+    metro_station: 64.7%
+    park: 100.0%
+    public_square: 31.6%
+    shopping_mall: 61.2%
+    street_pedestrian: 92.5%
+    street_traffic: 100.0%
+    tram: 92.0%
+seen domain: ['D3'] and its accuracy: 74.35
+    airport: 8.3%
+    bus: 97.7%
+    metro: 52.4%
+    metro_station: 47.2%
+    park: 0.0%
+    public_square: 52.1%
+    shopping_mall: 100.0%
+    street_pedestrian: 93.3%
+    street_traffic: 100.0%
+    tram: 27.9%
+seen domain: ['D4'] and its accuracy: 57.25
+Average Accuracy:  65.24
+(dcase) aakash@HP-ZBookPC1:~/dcase_task7$ 
