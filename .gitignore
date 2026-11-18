@@ -1,0 +1,40 @@
+# Data
+dataset/
+task7_data/
+tau_data_adil/
+
+# Model weights / checkpoints
+checkpoints/
+pretrained_models/
+submission/Divakar_IND_task7_1/checkpoint/
+tau_data/
+TAU2019_dev/
+*.pth
+# Generated submission packages
+Divakar_IND_task7/
+Divakar_IND_Dcase_task7/
+
+# Task spec PDF
+dcase_2026_task7.pdf
+
+# macOS / system junk
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# Editor / tooling
+.vscode/
+.idea/
+.claude/
+
+# Personal / non-project files
+conf images/
+*.log

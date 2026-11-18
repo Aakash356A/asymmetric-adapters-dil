@@ -1,0 +1,58 @@
+import pandas as pd
+import os
+
+sample_rate = 32000
+clip_samples = sample_rate * 4
+
+mel_bins = 64
+fmin = 50
+fmax = 14000
+window_size = 1024
+hop_size = 320
+window = 'hann'
+pad_mode = 'reflect'
+center = True
+device = 'cuda'
+ref = 1.0
+amin = 1e-10
+top_db = None
+classes_num_DIL = 10
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# ---------------------------------------------------------------------------
+# Dataset selection.
+#   DCASE_DATASET=task7 (default) -> original DCASE 2026 Task 7 data.
+#   DCASE_DATASET=tau             -> TAU Urban Acoustic Scenes 2019 DIL setup
+#                                    (data built by prepare_tau2019.py). Set
+#                                    TAU_DATA_DIR to override its location.
+# Front-end params above are shared; only the data folder + class map differ.
+# ---------------------------------------------------------------------------
+_DATASET = os.environ.get('DCASE_DATASET', 'task7').lower()
+
+if _DATASET == 'tau':
+    audio_folder_DIL = (os.environ.get('TAU_DATA_DIR',
+                        os.path.join(_BASE_DIR, 'tau_data'))) + os.sep
+    save_resume_path = os.path.join(_BASE_DIR, 'checkpoints', 'TAU_run') + os.sep
+    _tau_scenes = ['airport', 'bus', 'metro', 'metro_station', 'park',
+                   'public_square', 'shopping_mall', 'street_pedestrian',
+                   'street_traffic', 'tram']
+    dict_class_labels = {name: i for i, name in enumerate(_tau_scenes)}
+else:
+    audio_folder_DIL = os.path.join(_BASE_DIR, 'task7_data') + os.sep
+    save_resume_path = os.path.join(_BASE_DIR, 'checkpoints', 'BN_SE_lr1e-3_bs32_ep120_se_adapters') + os.sep
+    dict_class_labels = { 'alarm': 0,
+                   'baby_cry': 1,
+                   'bark': 2,
+                   'engine': 3,
+                   'fire': 4,
+                   'footsteps': 5,
+                   'knock': 6,
+                   'telephone_ringing': 7,
+                   'piano': 8,
+                   'speech': 9
+                   }
+
+output_folder    = os.path.join(audio_folder_DIL, 'results') + os.sep
+
+df_DIL_dev_train = pd.read_csv(os.path.join(audio_folder_DIL + 'evaluation_setup/' +'development_train.txt'), sep='\t', names=['filename', 'target', 'domain', 'new_target'])
+df_DIL_dev_test = pd.read_csv(os.path.join(audio_folder_DIL + 'evaluation_setup/' + 'development_test.txt'), sep='\t', names=['filename', 'target', 'domain', 'new_target'])

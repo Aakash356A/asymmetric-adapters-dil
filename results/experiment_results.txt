@@ -1,0 +1,80 @@
+2026-06-01 17:56:41 | MIXED_lr1e-3_bs32_ep120_mixed_model_test      | D2=55.4%  | D3=36.23% | Avg=45.815% | DONE
+2026-06-01 18:17:32 | DTN_lr1e-4_bs32_ep120                         | D2=40.06% | D3=31.02% | Avg=35.54% | DONE
+2026-06-01 18:37:51 | DTN_lr1e-3_bs64_ep120                         | D2=49.77% | D3=33.75% | Avg=41.760000000000005% | DONE
+2026-06-01 18:55:13 | BN_lr1e-4_bs32_ep120_baseline_repro           | D2=59.31% | D3=40.69% | Avg=50.0%  | DONE
+2026-06-01 19:12:19 | BN_lr1e-3_bs32_ep120                          | D2=55.4%  | D3=36.6%  | Avg=46.0%  | DONE
+2026-06-01 19:29:23 | DTN_lr5e-4_bs64_ep100_aug_test                | D2=42.88% | D3=31.64% | Avg=37.260000000000005% | DONE
+2026-06-02 11:56:20 | MIXED_lr1e-4_bs32_ep120_mixed_model_test      | D2=56.96% | D3=36.35% | Avg=46.655% | DONE
+2026-06-02 12:41:27 | BN_lr1e-4_bs32_ep120_baseline_repro2          | D2=59.15% | D3=40.69% | Avg=49.92% | DONE
+2026-06-02 15:55:44 | BN_lr1e-4_bs32_ep120_baseline_repro3          | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
+2026-06-02 16:15:24 | BN_lr1e-4_bs32_ep120_baseline_repro3          | D2=59.15% | D3=40.82% | Avg=49.985% | DONE
+2026-06-03 11:37:00 | BN_lr1e-4_bs32_ep120_baseline_repro3          | D2=58.84% | D3=40.69% | Avg=49.765% | DONE
+2026-06-03 11:54:46 | BN_CLF_lr1e-4_bs32_ep120_perdomain_head       | D2=54.15% | D3=34.49% | Avg=44.32% | DONE
+2026-06-03 12:13:08 | BN_COS_lr1e-4_bs32_ep120_perdomain_cosine     | D2=54.15% | D3=34.74% | Avg=44.445% | DONE
+2026-06-03 12:31:09 | BN_FILM_lr1e-4_bs32_ep120_film_adapters       | D2=56.65% | D3=38.83% | Avg=47.739999999999995% | DONE
+2026-06-03 12:49:12 | BN_SE_lr1e-4_bs32_ep120_se_adapters           | D2=61.82% | D3=38.21% | Avg=50.015% | DONE
+2026-06-03 13:06:19 | BN_ATT_lr1e-4_bs32_ep120_attention_pooling    | D2=58.37% | D3=35.61% | Avg=46.989999999999995% | DONE
+2026-06-03 16:18:24 | BN_SE_lr1e-3_bs32_ep120_se_adapters           | D2=70.27% | D3=45.04% | Avg=57.655% | DONE
+2026-06-03 17:56:10 | BN_SE_FREEZE_lr1e-4_bs32_ep120_se_freeze_backbone | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=2)
+2026-06-03 18:15:27 | BN_SE_DEEP_lr1e-3_bs32_ep120_deeper_se_adapters | D2=69.17% | D3=41.81% | Avg=55.49% | DONE
+2026-06-03 18:33:25 | BN_SE_CLF_lr1e-3_bs32_ep120_se_plus_domain_head | D2=72.14% | D3=46.9%  | Avg=59.519999999999996% | DONE
+2026-06-03 18:51:19 | BN_RES_lr1e-3_bs32_ep120_residual_bottleneck  | D2=73.87% | D3=53.47% | Avg=63.67% | DONE
+2026-06-04 13:56:30 | BN_GN_lr1e-3_bs32_ep120_groupnorm_baseline    | D2=20.81% | D3=9.31%  | Avg=15.059999999999999% | DONE
+2026-06-04 14:15:03 | BN_GN_SE_lr1e-3_bs32_ep120_groupnorm_plus_se  | D2=24.41% | D3=13.52% | Avg=18.965% | DONE
+2026-06-04 15:13:12 | BN_SE_lr1e-3_bs32_ep120_bar_lambda0.5         | D2=49.45% | D3=34.99% | Avg=42.22% | DONE
+2026-06-04 16:00:47 | BN_SE_lr1e-3_bs32_ep120_bar_lambda1.0         | D2=47.26% | D3=33.37% | Avg=40.315% | DONE
+2026-06-04 16:18:19 | BN_GN_lr1e-3_bs32_ep120_groupnorm_baseline    | D2=20.97% | D3=9.31%  | Avg=15.14% | DONE
+2026-06-04 16:26:01 | BN_GN_SE_lr1e-3_bs32_ep120_groupnorm_plus_se  | D2=27.7%  | D3=-%     | Avg=27.7%  | FAILED(exit=120)
+2026-06-05 13:38:58 | BN_RES_ADIL_lr1e-3_bs32_ep120_res_adil_head   | D2=76.06% | D3=52.85% | Avg=64.455% | DONE
+2026-06-05 14:15:45 | BN_RES_CLF_lr1e-3_bs32_ep120_res_clf_head     | D2=77.31% | D3=53.97% | Avg=65.64% | DONE
+2026-06-05 14:52:43 | BN_RES_lr5e-4_bs32_ep120_lr_5e4               | D2=72.77% | D3=52.36% | Avg=62.565% | DONE
+
+2026-06-05 16:20:28 | BN_RES_lr2e-3_bs32_ep120_lr_2e3               | D2=74.49% | D3=53.85% | Avg=64.17% | DONE
+2026-06-05 16:53:51 | BN_RES_lr1e-3_bs32_ep120_supcon_0.1           | D2=77.62% | D3=53.72% | Avg=65.67% | DONE
+2026-06-05 19:16:16 | BN_RES_ADIL_lr1e-3_bs32_ep120_adil_supcon_0.1 | D2=74.96% | D3=53.72% | Avg=64.34% | DONE
+2026-06-05 19:16:19 | BN_RES_lr1e-3_bs32_ep120_supcon_0.3           | D2=74.49% | D3=55.71% | Avg=65.1%  | DONE
+2026-06-06 15:42:34 | BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.1   | D2=76.53% | D3=55.33% | Avg=65.93% | DONE
+2026-06-06 15:42:36 | BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2   | D2=77.93% | D3=55.09% | Avg=66.51% | DONE
+2026-06-06 18:04:11 | BN_RES_lr1e-3_bs32_ep120_supcon_0.2           | D2=77.31% | D3=56.08% | Avg=66.695% | DONE
+2026-06-06 18:04:17 | BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.3   | D2=77.62% | D3=55.33% | Avg=66.475% | DONE
+2026-06-06 19:06:53 | DTN2_lr1e-3_bs32_ep120_layernorm_tanh_gate    | D2=53.21% | D3=34.12% | Avg=43.665% | DONE
+2026-06-06 22:28:02 | BN_RES_lr1e-3_bs32_ep120_supcon_0.15          | D2=74.96% | D3=55.33% | Avg=65.145% | DONE
+2026-06-06 22:28:04 | BN_RES_lr1e-3_bs32_ep120_supcon_0.25          | D2=74.96% | D3=54.34% | Avg=64.65% | DONE
+2026-06-07 00:50:16 | BN_RES_lr1e-3_bs32_ep120_supcon_temp0.10      | D2=77.78% | D3=53.23% | Avg=65.505% | DONE
+2026-06-07 00:50:21 | BN_RES_lr1e-3_bs32_ep120_supcon_temp0.05      | D2=75.43% | D3=54.59% | Avg=65.01% | DONE
+2026-06-07 01:58:25 | BN_RES_lr1e-3_bs64_ep120_supcon_bs64          | D2=76.21% | D3=56.95% | Avg=66.58% | DONE
+2026-06-08 14:46:42 | BN_GRN_lr1e-3_bs32_ep120_grn_norm             | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
+2026-06-09 02:47:36 | BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3         | D2=74.02% | D3=56.58% | Avg=65.3%  | DONE
+2026-06-09 02:49:13 | BN_RES_DEEP_lr1e-3_bs32_ep120_sym_deep2       | D2=74.96% | D3=58.44% | Avg=66.69999999999999% | DONE
+2026-06-09 04:02:57 | BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy   | D2=73.87% | D3=58.93% | Avg=66.4%  | DONE
+2026-06-09 06:24:48 | BN_RES_lr1e-3_bs32_ep120_aug_balanced         | D2=73.4%  | D3=45.91% | Avg=59.655% | DONE
+2026-06-09 06:24:50 | BN_RES_lr1e-3_bs32_ep120_aug                  | D2=76.21% | D3=51.99% | Avg=64.1%  | DONE
+2026-06-09 07:33:32 | BN_RES_lr1e-3_bs32_ep120_balanced             | D2=74.33% | D3=54.71% | Avg=64.52% | DONE
+2026-06-09 08:12:05 | BN_CLF_lr5e-4_bs32_ep120_perdomain_head_lr5e4 | D2=60.09% | D3=36.35% | Avg=48.22% | DONE
+2026-06-09 08:46:31 | BN_COS_lr5e-4_bs32_ep120_perdomain_cosine_lr5e4 | D2=59.94% | D3=36.23% | Avg=48.084999999999994% | DONE
+2026-06-09 16:31:26 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_sym2_sup02 | D2=74.96% | D3=55.33% | Avg=65.145% | DONE
+2026-06-09 16:31:38 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_d3_sup02 | D2=77.15% | D3=57.69% | Avg=67.42% | DONE
+2026-06-09 17:34:57 | BN_RES_DEEP_CLF_lr1e-3_bs64_ep120_deep_clf_d3_bs64_sup02 | D2=74.18% | D3=59.18% | Avg=66.68% | DONE
+2026-06-09 17:35:32 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_deep_clf_d3_sup01 | D2=75.12% | D3=57.2%  | Avg=66.16% | DONE
+--- Batch 13: ensemble eval ---
+  loaded bn_res_clf from /home/aakash/dcase_task7/checkpoints/BN_RES_CLF_lr1e-3_bs32_ep120_clf_supcon_0.2/checkpoint_D3.pth
+  [bn_res_deep] per-task adapter depths = {1: 1, 2: 3}
+  loaded bn_res_deep from /home/aakash/dcase_task7/checkpoints/BN_RES_DEEP_lr1e-3_bs32_ep120_asym_d3_heavy/checkpoint_D3.pth
+seen domain: ['D2'] and its accuracy: 76.53
+seen domain: ['D3'] and its accuracy: 57.2
+Average Accuracy:  66.87
+2026-06-09 23:05:52 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_bb0.05_no_l2 | D2=55.87% | D3=63.77% | Avg=59.82% | DONE
+2026-06-10 00:52:34 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_bb0.05_l2_1e3 | D2=72.77% | D3=55.21% | Avg=63.989999999999995% | DONE
+2026-06-10 02:18:55 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze1_bb0.05_l2_1e3 | D2=72.61% | D3=57.69% | Avg=65.15% | DONE
+2026-06-10 03:43:43 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_bb0.05_no_l2 | D2=58.53% | D3=66.38% | Avg=62.455% | DONE
+2026-06-10 05:14:36 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_bb0.05_l2_1e2 | D2=75.27% | D3=57.32% | Avg=66.295% | DONE
+2026-06-10 17:05:52 | BN_RES_CLF_lr1e-3_bs32_ep180_clf_sup02_ep180  | D2=77.93% | D3=55.96% | Avg=66.94500000000001% | DONE
+2026-06-10 18:35:07 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep180_deep_clf_d3_ep180 | D2=76.21% | D3=60.79% | Avg=68.5%  | DONE
+2026-06-11 02:08:45 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_no_l2 | D2=61.5%  | D3=62.28% | Avg=61.89% | DONE
+2026-06-11 04:03:15 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_l2_5e4 | D2=71.05% | D3=57.07% | Avg=64.06% | DONE
+2026-06-11 12:11:25 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_l2_1e4 | D2=61.03% | D3=59.31% | Avg=60.17% | DONE
+2026-06-11 13:22:11 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub2_l2_5e4 | D2=69.01% | D3=59.68% | Avg=64.345% | DONE
+2026-06-11 14:35:26 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_asym_d3only_ub3_l2_1e4 | D2=46.32% | D3=54.34% | Avg=50.33% | DONE
+2026-06-11 15:49:06 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_l2_1e4      | D2=56.65% | D3=59.68% | Avg=58.165% | DONE
+2026-06-11 17:05:18 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_l2_3e4      | D2=59.78% | D3=58.56% | Avg=59.17% | DONE
+2026-06-11 17:30:10 | BN_RES_DEEP_CLF_lr1e-3_bs32_ep120_unfreeze2_l2_5e4      | D2=-%     | D3=-%     | Avg=-%     | FAILED(exit=1)
