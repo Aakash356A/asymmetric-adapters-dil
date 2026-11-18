@@ -1,6 +1,6 @@
 # Asymmetric Residual Adapters for Domain-Incremental Audio Classification
 
-Code for our DCASE 2026 Task 7 submission (**Divakar_IND_task7_1**) and the accompanying DCASE 2026 Workshop paper, *Asymmetric Residual Adapters for Domain-Incremental Audio Classification* ([PDF](workshop_paper/paper.pdf)).
+Code for our DCASE 2026 Task 7 submission (**Divakar_IND_task7_1**) and the accompanying DCASE 2026 Workshop paper, *Asymmetric Residual Adapters for Domain-Incremental Audio Classification* ([Google Scholar](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=LKyT6Cd3khkC&citation_for_view=LKyT6Cd3khkC:9yKSN-GCB0IC) · [PDF](workshop_paper/paper.pdf)).
 
 The system extends the official Task 7 ADIL baseline. It adds per-domain residual bottleneck adapters of asymmetric depth (D2 = 1, D3 = 3), a warm-started per-domain classifier head and a supervised contrastive auxiliary loss. These sit on a shared, frozen CNN14 backbone with per-domain BatchNorm. D1 is reproduced exactly, so nothing is forgotten.
 
@@ -167,6 +167,8 @@ Exit code `0` (`ALL CHECKS PASSED`) means the `.py` and `.pth` files are consist
 ---
 
 ## Citation
+
+If you use this code, please cite our paper ([Google Scholar](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=LKyT6Cd3khkC&citation_for_view=LKyT6Cd3khkC:9yKSN-GCB0IC)):
 
 ```bibtex
 @inproceedings{divakar2026asymmetric,
